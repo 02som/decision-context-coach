@@ -1,0 +1,38 @@
+modules:
+  jira:issuePanel:
+    - key: jira-issue-panel
+      resource: main-ui-kit/entry
+      resolver:
+        function: resolver
+      render: native
+      title: Decision Context Coach
+      icon: resource:app-icon;icon.png
+
+  function:
+    - key: resolver
+      handler: resolvers/jira-issue-panel.handler
+
+resources:
+  - key: main-ui-kit
+    path: src/frontend/main-ui-kit
+    entry:
+      entry: jira-issue-panel.jsx
+
+  - key: app-icon
+    path: static/icons
+
+app:
+  runtime:
+    name: nodejs24.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/55567ccc-ae7b-4860-b0f0-2f58c37e7b7b
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+  external:
+    fetch:
+      backend:
+        - address: https://api.openai.com

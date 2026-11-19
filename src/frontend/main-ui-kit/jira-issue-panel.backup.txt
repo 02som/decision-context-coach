@@ -1,0 +1,265 @@
+
+import React, { useEffect, useState } from 'react';
+import ForgeReconciler, {
+  Text,
+  Heading,
+  Stack,
+  Button,
+  TextArea,
+  Spinner,
+  SectionMessage
+} from '@forge/react';
+
+import { requestJira, view } from '@forge/bridge';
+
+const createMockAnalysis = (issue) => {
+  const title = issue.fields.summary || '';
+  const lowerTitle = title.toLowerCase();
+
+  if (
+    lowerTitle.includes('question') ||
+    lowerTitle.includes('질문') ||
+    lowerTitle.includes('d06')
+  ) {
+    return {
+      decision:
+        'Decide how to generate a technical question from Jira context.',
+      risk:
+        'A question may be too generic or unsupported by the issue.',
+      question:
+        'Which Jira fields should be prioritized when generating a technical question, and why?'
+    };
+  }
+  
+  if (
+    lowerTitle.includes('feedback') ||
+    lowerTitle.includes('피드백') ||
+    lowerTitle.includes('d08')
+  ) {
+    return {
+      decision:
+        'Decide how to evaluate answers against Jira evidence.',
+      risk:
+        'Feedback may incorrectly treat unsupported claims as facts.',
+      question:
+        'How would you distinguish verified facts from unsupported claims in a user answer?'
+    };
+  }
+
+  if (
+    lowerTitle.includes('integration') ||
+    lowerTitle.includes('통합') ||
+    lowerTitle.includes('d09')
+  ) {
+    return {
+      decision:
+        'Decide how to connect analysis, questions, answers, and feedback.',
+      risk:
+        'A failure in one step may interrupt the entire workflow.',
+      question:
+        'How would you handle errors across the analysis-to-feedback workflow?'
+    };
+  }
+
+  return {
+    decision:
+      'Identify the main technical decision required by this issue.',
+    risk:
+      'The available Jira context may be incomplete.',
+    question:
+      'What is the most important technical decision for this issue, and why?'
+  };
+};
+
+const evaluateMockAnswer = (answer) => {
+  const text = answer.trim();
+  const lower = text.toLowerCase();
+
+  const evidenceWords = [
+    'because', '근거', '이유', '때문',
+    'based on', 'according to'
+  ];
+
+  const technicalWords = [
+    'api', 'database', 'error', 'security',
+    'performance', 'test', 'risk',
+    '설계', '오류', '보안', '성능',
+    '테스트', '위험', '데이터'
+  ];
+
+  const hasEvidence = evidenceWords.some(
+    (word) => lower.includes(word)
+  );
+
+  const hasTechnicalDetail = technicalWords.some(
+    (word) => lower.includes(word)
+  );
+
+  const isDetailed = text.length >= 80;
+
+  const score =
+    Number(hasEvidence) +
+    Number(hasTechnicalDetail) +
+    Number(isDetailed);
+
+  if (score === 3) {
+    return {
+      level: 'Strong',
+      message: 'Your answer includes reasoning and technical details.',
+      improvement: 'Explain trade-offs and cite specific Jira evidence.'
+    };
+  }
+
+  if (score >= 1) {
+    return {
+      level: 'Needs improvement',
+      message: 'Your answer contains some useful elements.',
+      improvement: 'Add clearer reasoning, technical details, and evidence.'
+    };
+  }
+
+  return {
+    level: 'Insufficient',
+    message: 'Your answer needs more technical reasoning.',
+    improvement: 'Explain what you would do, why, and what risks matter.'
+  };
+};
+
+
+const App = () => {
+  const [issue, setIssue] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [analysis, setAnalysis] = useState(false);
+  const [answer, setAnswer] = useState('');
+  const [feedback, setFeedback] = useState(null);
+
+  useEffect(() => {
+    const loadIssue = async () => {
+      try {
+        const context = await view.getContext();
+        const issueKey = context.extension?.issue?.key;
+
+        if (!issueKey) {
+          throw new Error('Issue key not found.');
+        }
+
+        const response = await requestJira(
+          `/rest/api/3/issue/${encodeURIComponent(issueKey)}?fields=summary,description`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Jira API error: ${response.status}`);
+        }
+
+        setIssue(await response.json());
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadIssue();
+  }, []);
+
+  const handleAnalyze = () => {
+    setAnalysis(true);
+    setFeedback(null);
+  };
+
+  
+  const handleFeedback = () => {
+    if (!answer.trim()) {
+      setError('Please enter your answer first.');
+      return;
+    }
+
+    setError('');
+    const result = evaluateMockAnswer(answer);
+    setFeedback(result);
+  };
+
+  const mockResult = issue ? createMockAnalysis(issue) : null;
+  
+  if (loading) return <Spinner />;
+
+  return (
+    <Stack space="space.200">
+      <Heading size="medium">Decision Context Coach</Heading>
+      <Text>Demo mode: Mock AI (no API cost)</Text>
+
+      {error && (
+        <SectionMessage appearance="error">
+          <Text>{error}</Text>
+        </SectionMessage>
+      )}
+
+      {issue && (
+        <>
+          <Text>Issue: {issue.key}</Text>
+          <Text>Title: {issue.fields.summary}</Text>
+
+          <Button
+            appearance="primary"
+            onClick={handleAnalyze}
+          >
+            Analyze Issue
+          </Button>
+        </>
+      )}
+
+      
+    {analysis && mockResult && (
+      <>
+        <Heading size="small">1. Decision Analysis</Heading>
+
+        <Text>Decision: {mockResult.decision}</Text>
+        <Text>Risk: {mockResult.risk}</Text>
+        <Text>Evidence: {issue.fields.summary}</Text>
+
+        <Heading size="small">2. Technical Question</Heading>
+        <Text>{mockResult.question}</Text>
+
+        <Heading size="small">3. Your Answer</Heading>
+        <TextArea
+          value={answer}
+          onChange={(event) => {
+            setAnswer(event.target.value);
+            setFeedback(null);
+          }}
+          placeholder="Write your technical reasoning..."
+        />
+
+        <Button onClick={handleFeedback}>
+          Evaluate Answer
+        </Button>
+      </>
+    )}
+
+
+      
+    {feedback && (
+      <>
+        <Heading size="small">4. Mock Feedback</Heading>
+
+        <Text>Evaluation: {feedback.level}</Text>
+        <Text>{feedback.message}</Text>
+        <Text>Improvement: {feedback.improvement}</Text>
+
+        <Text>
+          Note: This is rule-based feedback.
+          Factual correctness has not been verified.
+        </Text>
+      </>
+    )}
+
+    </Stack>
+  )};
+;
+
+ForgeReconciler.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
