@@ -4,15 +4,13 @@ import ForgeReconciler, {
   Text,
   Heading,
   Stack,
-  Box,
   Button,
   TextArea,
   Spinner,
   SectionMessage
 } from '@forge/react';
 
-import { requestJira, view } from '@forge/bridge';
-
+import { requestJira, view, invoke } from '@forge/bridge';
 
 const extractJiraText = (node) => {
   if (!node) return '';
@@ -236,6 +234,7 @@ const App = () => {
   const [feedback, setFeedback] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     const loadIssue = async () => {
@@ -266,9 +265,26 @@ const App = () => {
     loadIssue();
   }, []);
 
-  const handleAnalyze = () => {
-    setAnalysis(true);
+  const handleAnalyze = async () => {
+    if (!issue || analyzing) return;
+
+    setAnalyzing(true);
+    setAnalysis(false);
     setFeedback(null);
+    setSaveMessage('');
+    setError('');
+
+    try {
+      const result = await invoke('analyzeIssue', {
+        issueKey: issue.key
+      });
+
+      setAnalysis(result);
+    } catch (err) {
+      setError(err.message || 'AI 분석 중 오류가 발생했습니다.');
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   
@@ -366,13 +382,12 @@ const handleSaveToJira = async () => {
 
   const mockResult = issue ? createMockAnalysis(issue) : null;
   
-  if (loading) return <Spinner />;
+
 
   return (
     <Stack space="space.200">
       <Heading size="medium">Decision Context Coach</Heading>
-      <Text>Demo mode: Mock AI (no API cost)</Text>
-
+      <Text>AI analysis: Groq | Answer evaluation: Rule-based Mock</Text>
       {error && (
         <SectionMessage appearance="error">
           <Text>{error}</Text>
@@ -393,7 +408,14 @@ const handleSaveToJira = async () => {
         </>
       )}
 
-      
+      {analyzing && <Spinner />}
+
+      {analysis && (
+        <>
+          <Heading size="small">Groq AI Analysis</Heading>
+          <Text>{analysis}</Text>
+        </>
+      )}
       {analysis && mockResult && (
         <>
           
@@ -492,8 +514,8 @@ const handleSaveToJira = async () => {
     )}
 
     </Stack>
-  )};
-;
+  );
+};
 
 ForgeReconciler.render(
   <React.StrictMode>

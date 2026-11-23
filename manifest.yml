@@ -35,4 +35,4 @@ permissions:
   external:
     fetch:
       backend:
-        - address: https://api.openai.com
+        - address: https://api.groq.com
