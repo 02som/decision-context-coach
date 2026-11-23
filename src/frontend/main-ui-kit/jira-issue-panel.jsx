@@ -286,7 +286,29 @@ const App = () => {
       setAnalyzing(false);
     }
   };
+  const getAnalysisSection = (text, sectionNumber) => {
+  if (typeof text !== 'string') return '';
 
+  const escaped = text
+    .replace(/\*\*/g, '')
+    .replace(/\r/g, '');
+
+  const nextNumber = sectionNumber + 1;
+  const startPattern = new RegExp(
+    `(?:^|\\n)\\s*${sectionNumber}\\.\\s*`
+  );
+  const nextPattern = new RegExp(
+    `(?:^|\\n)\\s*${nextNumber}\\.\\s*`
+  );
+
+  const start = escaped.search(startPattern);
+  if (start === -1) return '';
+
+  const remaining = escaped.slice(start).replace(startPattern, '');
+  const end = remaining.search(nextPattern);
+
+  return (end === -1 ? remaining : remaining.slice(0, end)).trim();
+};
   
   const handleFeedback = () => {
     if (!answer.trim()) {
@@ -381,7 +403,10 @@ const handleSaveToJira = async () => {
 
 
   const mockResult = issue ? createMockAnalysis(issue) : null;
-  
+  const aiDecision = getAnalysisSection(analysis, 2);
+  const aiTechnicalDetails = getAnalysisSection(analysis, 3);
+  const aiMissingInfo = getAnalysisSection(analysis, 4);
+  const aiQuestion = getAnalysisSection(analysis, 5);
 
 
   return (
@@ -410,12 +435,6 @@ const handleSaveToJira = async () => {
 
       {analyzing && <Spinner />}
 
-      {analysis && (
-        <>
-          <Heading size="small">Groq AI Analysis</Heading>
-          <Text>{analysis}</Text>
-        </>
-      )}
       {analysis && mockResult && (
         <>
           
@@ -436,11 +455,11 @@ const handleSaveToJira = async () => {
     <Text>No description provided in Jira.</Text>
   )}
 
-  <Heading size="small">Suggested Decision (Mock)</Heading>
-  <Text>{mockResult.decision}</Text>
+  <Heading size="small">Suggested Decision (Groq AI)</Heading>
+  <Text>{aiDecision || 'AI 분석 결과에서 의사결정 항목을 찾지 못했습니다.'}</Text>
 
-  <Heading size="small">Potential Risk (Mock)</Heading>
-  <Text>{mockResult.risk}</Text>
+  <Heading size="small">Technical Considerations (Groq AI)</Heading>
+  <Text>{aiTechnicalDetails || '기술적 고려사항을 추출하지 못했습니다.'}</Text>
 
   <Heading size="small">Missing Information</Heading>
 
@@ -466,7 +485,7 @@ const handleSaveToJira = async () => {
 
       <Heading size="small">2. Technical Question</Heading>
 
-        <Text>{mockResult.question}</Text>
+        <Text>{aiQuestion || 'AI가 기술 질문을 생성하지 못했습니다.'}</Text>
 
         <Heading size="small">3. Your Answer</Heading>
         <TextArea
