@@ -127,17 +127,40 @@ The Forge manifest must also permit the external Groq API endpoint and include t
 
 > Do not copy production secrets into personal environments or share secret values in chat, issues, commits, screenshots, or pull requests.
 
+## Team Contributions and Responsibilities
+
+### Original Concept
+
+**Kang Seongyun (강성윤)** — Original project idea and concept proposal for DevDecision / Decision Context Coach.
+
+Concept contribution is credited separately from the implementation assignments in the revised Jira WBS. This distinction recognizes the original idea without implying that the concept contributor owns an engineering workstream in the current WBS.
+
+### Implementation Responsibilities
+
+The current engineering assignments follow the **revised Jira WBS dated November 22, 2026**.
+
 ## Team Responsibilities
 
-The current division of work follows the **revised Jira WBS dated November 22, 2026**.
+The current development responsibilities follow the **revised Jira WBS dated November 22, 2026**. Original concept and design contributions are also acknowledged below.
 
 | Owner | Responsibility | WBS area |
-| --- | --- | --- |
-| **Somin Lee** | LLM integration, Jira issue analysis, structured Decision Cards, question generation, application integration, deployment, demos, and submission | MT0, MT1, MT4, MT5 |
-| **Kim Songheon** | Answer-evaluation rubric, AI evaluation prompts, feedback JSON, evidence safeguards, and evaluator tests | MT2 |
-| **Kyeongseo Park** | Jira field mapping, data preprocessing, test issues, evidence validation, and Bitbucket integration feasibility | MT3 |
+|---|---|---|
+| **Somin Lee (이소민)** | LLM integration, Jira issue analysis, structured Decision Cards, question generation, application integration, deployment, demos, and submission | MT0, MT1, MT4, MT5 |
+| **Kim Songheon (김송헌)** | Answer-evaluation rubric, AI evaluation prompts, feedback JSON, evidence safeguards, and evaluator tests | MT2 |
+| **Kyeongseo Park (박경서)** | Jira field mapping, data preprocessing, test issues, evidence validation, and Bitbucket integration feasibility | MT3 |
+| **Kang Seongyun (강성윤)** | Original project idea, concept proposal, and initial service ideation | Concept |
+| **Hyunju Oh (오현주)** | user flow planning, 27-screen development handoff, and DevDecision user flow diagrams | Design |
 
 For detailed task ownership and acceptance criteria, refer to the current Jira WBS (`DFAS` project). Do not use earlier WBS documents as the source of truth.
+
+### User Flow
+
+**Hyunju Oh (오현주)** — user-flow documentation, including the two development handoff artifacts below:
+
+- **Development Handoff — 27 Screens — User Flow** (`개발 전달용 · 27 Screens · User Flow.svg`)
+- **DevDecision — User Flow** (`유저 플로우 · DevDecision.svg`)
+
+These design artifacts were created by **Hyunju Oh**. Her design contribution is credited separately from the engineering assignments in the revised Jira WBS. If these files are added to the repository, update this section with their relative paths.
 
 ## Collaboration Workflow
 
