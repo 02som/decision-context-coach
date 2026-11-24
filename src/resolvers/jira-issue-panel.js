@@ -1,5 +1,11 @@
 import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
+import { runEvaluateAnswer } from '../evaluation/evaluate-answer.js';
+import {
+  ERROR_CODES,
+  EvaluationError,
+  toSafeErrorMessage
+} from '../evaluation/errors.js';
 
 const resolver = new Resolver();
 
@@ -202,6 +208,80 @@ resolver.define('analyzeIssue', async ({ payload, context }) => {
   }
 
   return analysis;
+});
+
+/**
+ * evaluateAnswer에서 쓰는 Jira 이슈 조회 함수입니다 (api-contract.md 2절 형식으로 정규화).
+ *
+ * - asUser(): 현재 사용자의 권한으로 조회하므로, 사용자가 볼 수 없는 이슈는 평가에 쓸 수 없습니다.
+ * - 클라이언트가 보낸 이슈 내용은 믿지 않고, 이 함수가 Jira에서 다시 가져온 값만 평가 근거로 씁니다.
+ * - ADF 형식의 description은 analyzeIssue와 같은 extractText()로 평문으로 바꿉니다.
+ *
+ * @param {string} issueKey
+ * @returns {Promise<{ key: string, summary: string, description: string }>}
+ */
+async function loadIssueForEvaluation(issueKey) {
+  const response = await api.asUser().requestJira(
+    route`/rest/api/3/issue/${issueKey}?fields=summary,description`
+  );
+
+  if (!response.ok) {
+    throw new EvaluationError(ERROR_CODES.JIRA_FETCH_FAILED, undefined, {
+      status: response.status
+    });
+  }
+
+  const issue = await response.json();
+
+  return {
+    key: issue.key,
+    summary: issue.fields?.summary,
+    description: extractText(issue.fields?.description)
+  };
+}
+
+/**
+ * 사용자 답변 AI 평가 (WBS 2.4~2.6 / DFAS-136~138, api-contract.md 4~6절)
+ *
+ * 프론트엔드 호출 예:
+ *   invoke('evaluateAnswer', { issueKey, analysis, question, answer })
+ *
+ * 성공 시 반환:
+ *   { scores: { accuracy, evidence, explanation }, total, level, feedback, improvement, unverifiedClaims }
+ *
+ * 실패 시:
+ *   사용자에게 보여 줘도 안전한 한국어 message를 가진 Error를 throw합니다.
+ *   에러 코드와 상태 코드는 Forge 로그에만 남기고, Groq 응답 원문이나 API 키는 남기지 않습니다.
+ *
+ * 실제 로직은 src/evaluation/evaluate-answer.js에 있습니다. 여기서는 Forge에 의존하는 값
+ * (현재 이슈 키, Jira 조회 함수, api.fetch, 환경변수)만 넘겨줍니다.
+ */
+resolver.define('evaluateAnswer', async ({ payload, context }) => {
+  try {
+    return await runEvaluateAnswer({
+      payload,
+      activeIssueKey: context?.extension?.issue?.key,
+      loadIssue: loadIssueForEvaluation,
+      apiKey: process.env.GROQ_API_KEY,
+      // api.fetch를 그대로 넘기지 않고 화살표 함수로 감싸 this 바인딩 문제를 피합니다.
+      fetchFn: (url, options) => api.fetch(url, options)
+    });
+  } catch (error) {
+    if (error instanceof EvaluationError) {
+      console.error('[evaluateAnswer] failed', {
+        code: error.code,
+        details: error.details
+      });
+    } else {
+      // 예상하지 못한 오류(코드 버그 등): 원인 파악을 위해 이름과 메시지만 남깁니다.
+      console.error('[evaluateAnswer] unexpected error', {
+        name: error?.name,
+        message: error?.message
+      });
+    }
+
+    throw new Error(toSafeErrorMessage(error));
+  }
 });
 
 export const handler = resolver.getDefinitions();

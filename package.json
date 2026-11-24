@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"test/**/*.test.js\"",
+    "try:evaluation": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env scripts/try-evaluation.js"
+  },
   "dependencies": {
     "@forge/api": "^8.5.0",
     "@forge/bridge": "^7.0.0",
