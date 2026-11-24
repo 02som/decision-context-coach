@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ForgeReconciler, {
   Text,
   Heading,
@@ -109,121 +109,9 @@ const createMockAnalysis = (issue) => {
 
 
 
-const normalizeTechnicalTerms = (text) => {
-  const normalized = String(text || '').toLowerCase();
-
-  const termGroups = {
-    api: ['api', 'rest api', '인터페이스'],
-    llm: ['llm', 'language model', '언어 모델', '언어모델'],
-    integration: ['integration', 'integrate', '연동', '통합'],
-    security: ['security', 'secure', '보안', '인증'],
-    error: ['error', 'failure', '오류', '실패'],
-    testing: ['test', 'testing', '테스트', '검증'],
-    context: ['context', '맥락', '문맥'],
-    feedback: ['feedback', '피드백'],
-    question: ['question', '질문']
-  };
-
-  const found = new Set();
-
-  for (const [term, variants] of Object.entries(termGroups)) {
-    if (variants.some((variant) => normalized.includes(variant))) {
-      found.add(term);
-    }
-  }
-
-  return [...found];
-};
-
-const evaluateMockAnswer = (answer, issue) => {
-  const text = answer.trim();
-  const lower = text.toLowerCase();
-
-  const evidenceWords = [
-    'because', '근거', '이유', '때문',
-    'based on', 'according to'
-  ];
-
-  const technicalWords = [
-    'api', 'database', 'error', 'security',
-    'performance', 'test', 'risk',
-    '설계', '오류', '보안', '성능',
-    '테스트', '위험', '데이터'
-  ];
-
-  const hasEvidence = evidenceWords.some(
-    (word) => lower.includes(word)
-  );
-
-  const hasTechnicalDetail = technicalWords.some(
-    (word) => lower.includes(word)
-  );
-
-  const isDetailed = text.length >= 80;
-
-  
-// Compare the answer with Jira title and description.
-const title = issue?.fields?.summary || '';
-const description = extractJiraText(
-  issue?.fields?.description
-);
-
-const jiraText = `${title}\n${description}`;
-
-const jiraTerms = normalizeTechnicalTerms(jiraText);
-const answerTerms = normalizeTechnicalTerms(text);
-
-const matchedWords = jiraTerms.filter(
-  (term) => answerTerms.includes(term)
-);
-
-const hasJiraRelevance = matchedWords.length >= 2;
-
-  const score =
-    Number(hasEvidence) +
-    Number(hasTechnicalDetail) +
-    Number(isDetailed) +
-    Number(hasJiraRelevance);
-
-  const level =
-    score >= 4
-      ? 'Strong'
-      : score >= 2
-        ? 'Needs improvement'
-        : 'Insufficient';
-
-  const improvements = [];
-
-  if (!hasEvidence) {
-    improvements.push('Explain why you chose this approach.');
-  }
-
-  if (!hasTechnicalDetail) {
-    improvements.push('Include technical details and risks.');
-  }
-
-  if (!isDetailed) {
-    improvements.push('Provide a more detailed explanation.');
-  }
-
-  if (!hasJiraRelevance) {
-    improvements.push('Connect your answer to the Jira issue.');
-  }
-
-  return {
-    level,
-    score,
-    matchedWords,
-    message: hasJiraRelevance
-      ? 'Your answer mentions terms from the Jira issue.'
-      : 'No matching issue-title terms were detected.',
-    improvement: improvements.length > 0
-      ? improvements.join(' ')
-      : 'Explain trade-offs and cite specific Jira evidence.'
-  };
-};
-
-
+// 답변 평가는 백엔드 resolver의 evaluateAnswer(Groq AI)가 합니다 (WBS 2.6 / DFAS-138).
+// 예전 규칙 기반 평가(evaluateMockAnswer)는 삭제했습니다. AI 평가가 실패해도 규칙 기반 점수로 대신하지 않습니다.
+// 채점 기준: docs/evaluation-rubric.md, 응답 형식: docs/api-contract.md 5절
 
 const App = () => {
   const [issue, setIssue] = useState(null);
@@ -235,6 +123,14 @@ const App = () => {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [evaluating, setEvaluating] = useState(false);
+
+  // AI 평가는 몇 초 걸립니다. 그사이 사용자가 이슈를 다시 분석하거나 답변을 고치면
+  // 늦게 도착한 예전 결과를 보여 주지 않도록, 화면의 최신 값을 ref에 담아 두고 비교합니다.
+  const latestAnalysisRef = useRef(analysis);
+  const latestAnswerRef = useRef(answer);
+  latestAnalysisRef.current = analysis;
+  latestAnswerRef.current = answer;
 
   useEffect(() => {
     const loadIssue = async () => {
@@ -288,15 +184,54 @@ const App = () => {
   };
 
   
-  const handleFeedback = () => {
+  /**
+   * 사용자 답변을 AI(Groq)로 평가합니다 (WBS 2.6 / DFAS-138).
+   *
+   * - 실제 평가는 백엔드 resolver의 evaluateAnswer가 합니다 (src/evaluation/).
+   *   백엔드는 Jira 이슈를 다시 조회해서 평가 근거로 쓰므로, 여기서는 이슈 내용을 보내지 않습니다.
+   * - 성공하면 { scores, total, level, feedback, improvement, unverifiedClaims }를 받습니다.
+   * - 실패하면 백엔드가 준 안전한 안내 문구만 보여 주고, 결과는 표시하지 않습니다.
+   */
+  const handleFeedback = async () => {
+    if (!issue || !analysis || evaluating) return;
+
+    // 빈 답변은 백엔드에서도 거부하지만, 불필요한 호출을 줄이려고 먼저 확인합니다.
     if (!answer.trim()) {
-      setError('Please enter your answer first.');
+      setError('답변을 입력해 주세요.');
       return;
     }
 
+    // 요청을 보낸 시점의 값입니다. 응답이 왔을 때 화면의 최신 값과 비교합니다.
+    const requestedAnalysis = analysis;
+    const requestedAnswer = answer;
+    const isStale = () =>
+      latestAnalysisRef.current !== requestedAnalysis ||
+      latestAnswerRef.current !== requestedAnswer;
+
+    setEvaluating(true);
+    setFeedback(null);
+    setSaveMessage('');
     setError('');
-    const result = evaluateMockAnswer(answer, issue);
-    setFeedback(result);
+
+    try {
+      const result = await invoke('evaluateAnswer', {
+        issueKey: issue.key,
+        analysis: requestedAnalysis,
+        question: requestedAnalysis.question,
+        answer: requestedAnswer
+      });
+
+      // 평가하는 동안 이슈를 다시 분석했거나 답변을 고쳤다면 예전 결과는 버립니다.
+      if (!isStale()) {
+        setFeedback(result);
+      }
+    } catch (err) {
+      if (!isStale()) {
+        setError(err.message || 'AI 평가 중 오류가 발생했습니다.');
+      }
+    } finally {
+      setEvaluating(false);
+    }
   };
 
 const handleSaveToJira = async () => {
@@ -392,7 +327,7 @@ const handleSaveToJira = async () => {
   return (
     <Stack space="space.200">
       <Heading size="medium">Decision Context Coach</Heading>
-      <Text>AI analysis: Groq | Answer evaluation: Rule-based Mock</Text>
+      <Text>AI analysis: Groq | Answer evaluation: Groq AI</Text>
       {error && (
         <SectionMessage appearance="error">
           <Text>{error}</Text>
@@ -470,26 +405,40 @@ const handleSaveToJira = async () => {
           placeholder="Write your technical reasoning..."
         />
 
-        <Button onClick={handleFeedback}>
-          Evaluate Answer
+        <Button onClick={handleFeedback} isDisabled={evaluating}>
+          {evaluating ? 'Evaluating...' : 'Evaluate Answer'}
         </Button>
+
+        {evaluating && <Spinner />}
       </>
     )}
 
     {feedback && (
       <>
-        <Heading size="small">4. Mock Feedback</Heading>
+        <Heading size="small">4. AI Feedback (Groq)</Heading>
 
-        <Text>Score: {feedback.score} / 4</Text>
-        <Text>
-          Matched Jira terms: {feedback.matchedWords.join(', ') || 'None'}
-        </Text>
-        <Text>{feedback.message}</Text>
+        {/* 총점과 등급은 백엔드가 계산한 값을 그대로 표시합니다 (api-contract.md 5절). */}
+        <Text>Total: {feedback.total} / 12 ({feedback.level})</Text>
+        <Text>Accuracy (정확성): {feedback.scores.accuracy} / 4</Text>
+        <Text>Evidence (근거): {feedback.scores.evidence} / 4</Text>
+        <Text>Explanation (설명 충실도): {feedback.scores.explanation} / 4</Text>
+
+        <Text>Feedback: {feedback.feedback}</Text>
         <Text>Improvement: {feedback.improvement}</Text>
 
+        {/* Jira 이슈로 확인할 수 없는 주장은 사실처럼 보이지 않도록 따로 표시합니다. */}
+        <Text>Unverified claims (Jira로 확인 불가):</Text>
+        {feedback.unverifiedClaims.length > 0 ? (
+          feedback.unverifiedClaims.map((claim, index) => (
+            <Text key={index}>- {claim}</Text>
+          ))
+        ) : (
+          <Text>None</Text>
+        )}
+
         <Text>
-          Note: This is rule-based feedback.
-          Factual correctness has not been verified.
+          Note: AI-generated evaluation based only on the Jira issue text.
+          Scores are learning feedback, not verified facts about the code.
         </Text>
         <Button
           appearance="primary"
