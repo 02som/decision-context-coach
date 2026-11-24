@@ -1,6 +1,6 @@
 # Decision Context Coach — API Contract
 
-**Version:** 0.1.0 (proposed for team agreement)  
+**Version:** 0.2.0 (proposed for team agreement; see section 9 for changes)  
 **Jira:** DFAS-124 / WBS 0.4  
 **Scope:** Forge MVP; Jira issue analysis, technical questions, answer evaluation, and integration.
 
@@ -67,22 +67,28 @@ The backend retrieves the authorized issue again and passes the normalized `issu
 
 ## 5. Answer evaluation result — MT2 (DFAS-134–139)
 
-Proposed response for agreement with Kim:
+Response, with the scale and criteria confirmed by Kim in [`evaluation-rubric.md`](evaluation-rubric.md):
 
 ```json
 {
   "scores": {
     "accuracy": 3,
     "evidence": 2,
-    "explanation": 3
+    "explanation": 1
   },
-  "feedback": "팀별 접근 제어라는 이슈 목표와 일치하는 접근을 설명했다.",
-  "improvement": "권한 검증 실패 시 응답과 테스트 방법을 추가로 설명하라.",
-  "unverifiedClaims": ["실제 서버 구현과 권한 정책은 Jira 정보만으로 확인할 수 없다."]
+  "total": 6,
+  "level": "Needs improvement",
+  "feedback": "팀별 접근 제어라는 이슈 목표와 일치하는 서버 측 검증 방법을 제시했다.",
+  "improvement": "이 방식을 선택한 이유와 권한 검증 실패 시 응답, 테스트 방법을 추가로 설명하라.",
+  "unverifiedClaims": []
 }
 ```
 
-Proposed scoring: integer 0–4 per criterion, total 0–12 calculated by the application, not the LLM. Kim owns the rubric and must confirm the scale and criteria before this contract is finalized. Accuracy means technical plausibility and consistency with available evidence, not independent verification of code. Evidence means connection to supplied Jira context. Explanation means reasoning completeness. `feedback` and `improvement` are nonempty strings; `unverifiedClaims` is an array of nonempty strings (empty if none identified). Unverifiable claims must not be presented as verified facts. Do not return fabricated scores for failed or empty requests. Existing Mock scores must remain clearly labeled until replacement is tested.
+Scoring: integer 0–4 per criterion. Criteria and score anchors are defined in `evaluation-rubric.md`. Accuracy means technical plausibility and consistency with available evidence, not independent verification of code. Evidence means connection to the supplied Jira issue; the AI analysis is not evidence. Explanation means reasoning completeness.
+
+`total` and `level` are calculated by the resolver after the LLM output passes validation; the LLM never produces them. `total` is the integer sum of the three scores (0–12). `level` is `"Strong"` (10–12), `"Needs improvement"` (6–9) or `"Insufficient"` (0–5). The frontend and the Jira comment display these values as returned and do not recalculate them.
+
+`feedback` and `improvement` are nonempty strings. `unverifiedClaims` is an array of nonempty strings listing project-specific facts that the answer asserts but the Jira issue cannot confirm, for example `"Keycloak으로 팀 권한을 관리하고 있다는 내용은 Jira 이슈에서 확인할 수 없다."`. Plans, proposals and general technical knowledge are not listed. The array is empty if none are identified; the example answer above only describes a plan, so it is empty. Unverifiable claims must not be presented as verified facts. Do not return fabricated scores for failed or empty requests. Existing Mock scores must remain clearly labeled until replacement is tested.
 
 ## 6. Errors — MT1 / MT2 / MT4
 
@@ -113,3 +119,8 @@ The saved comment must use the actual displayed question, answer, analysis and e
 - All: agree on field names and types before merging; record changes here and notify affected owners.
 
 DFAS-124 completion criterion: share input/output JSON examples with the team. Record agreement or requested changes in Jira. Implementation and runtime verification belong to subsequent WBS tasks.
+
+## 9. Change log
+
+- **0.2.0 (2026-11-24, Kim Songheon, MT2):** Section 5 adds `total` and `level`, both calculated by the resolver. The section 5 example scores are aligned to the confirmed rubric (3/2/3 → 3/2/1), and the example `unverifiedClaims` is `[]` because the example answer asserts no unverifiable facts. The section now links to `evaluation-rubric.md`. Affected owner: Somin Lee (MT4: DFAS-142 display and DFAS-143 Jira comment should read `total` and `level` from the response).
+- **0.1.0:** Initial proposal.
