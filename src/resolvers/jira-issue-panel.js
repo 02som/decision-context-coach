@@ -1,6 +1,7 @@
 import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
 import { runEvaluateAnswer } from '../evaluation/evaluate-answer.js';
+import { requestGroqAnalysis } from '../analysis/groq-client.js';
 import {
   ERROR_CODES,
   EvaluationError,
@@ -59,10 +60,11 @@ resolver.define('analyzeIssue', async ({ payload, context }) => {
     description: extractText(issue.fields.description)
   };
 
-  // Groq API 호출
-  const response = await api.fetch(
-    'https://api.groq.com/openai/v1/chat/completions',
-    {
+    // Groq API 호출
+    const content = await requestGroqAnalysis({
+      fetchFn: (url, options) => api.fetch(url, options),
+      url: 'https://api.groq.com/openai/v1/chat/completions',
+      options: {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -134,32 +136,8 @@ resolver.define('analyzeIssue', async ({ payload, context }) => {
           }
         ]
       })
-    }
-  );
-
-  const rawResponse = await response.text();
-
-  if (!response.ok) {
-    throw new Error(
-      `Groq API 요청 실패 (${response.status}): ${rawResponse.slice(0, 300)}`
-    );
   }
-
-  let result;
-
-  try {
-    result = JSON.parse(rawResponse);
-  } catch {
-    throw new Error(
-      `Groq API 응답 형식 오류: ${rawResponse.slice(0, 300)}`
-    );
-  }
-
-  const content = result.choices?.[0]?.message?.content;
-
-  if (!content) {
-    throw new Error('AI 분석 결과가 비어 있습니다.');
-  }
+});
 
   let analysis;
 
@@ -168,8 +146,6 @@ resolver.define('analyzeIssue', async ({ payload, context }) => {
   } catch {
     throw new Error('Groq 분석 결과가 올바른 JSON 형식이 아닙니다.');
   }
-
-
     if (
     !analysis ||
     typeof analysis !== 'object' ||
