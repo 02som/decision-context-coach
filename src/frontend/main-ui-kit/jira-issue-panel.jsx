@@ -266,11 +266,18 @@ const handleSaveToJira = async () => {
       answer,
       '',
       `Evaluation: ${feedback.level}`,
-      `Score: ${feedback.score} / 4`,
-      `Matched Jira Terms: ${
-        feedback.matchedWords.join(', ') || 'None'
-      }`,
+      `Total: ${feedback.total} / 12`,
+      `Accuracy: ${feedback.scores.accuracy} / 4`,
+      `Evidence: ${feedback.scores.evidence} / 4`,
+      `Explanation: ${feedback.scores.explanation} / 4`,
+      '',
+      `Feedback: ${feedback.feedback}`,
       `Improvement: ${feedback.improvement}`,
+      '',
+      'Unverified Claims (Jira):',
+      feedback.unverifiedClaims.length > 0
+        ? feedback.unverifiedClaims.map(claim => `- ${claim}`).join('\n')
+        : 'None',
       '',
       'Disclaimer: Rule-based mock evaluation.',
       'Factual correctness has not been verified.'
