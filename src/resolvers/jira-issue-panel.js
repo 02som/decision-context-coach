@@ -168,7 +168,7 @@ resolver.define('analyzeIssue', async ({ payload, context }) => {
   } catch {
     throw new Error('Groq 분석 결과가 올바른 JSON 형식이 아닙니다.');
   }
-  analysis.decision = 123;
+
 
     if (
     !analysis ||
