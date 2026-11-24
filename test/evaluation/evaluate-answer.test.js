@@ -15,7 +15,7 @@ import {
   UNEXPECTED_ERROR_MESSAGE,
   toSafeErrorMessage
 } from '../../src/evaluation/errors.js';
-import { runEvaluateAnswer } from '../../src/evaluation/evaluate-answer.js';
+import { INSTRUCTION_NOTICE, runEvaluateAnswer } from '../../src/evaluation/evaluate-answer.js';
 import {
   EVALUATION_MODEL,
   GROQ_CHAT_COMPLETIONS_URL
@@ -145,7 +145,9 @@ describe('runEvaluateAnswer: 정상 흐름', () => {
       responses: [
         groqSuccess(
           buildModelOutput({
+            instructionInAnswer: true,
             scores: { accuracy: 0, evidence: 1, explanation: 0 },
+            feedback: '구체적인 검증 방법이 없다.',
             unverifiedClaims: [claim]
           })
         )
@@ -160,6 +162,26 @@ describe('runEvaluateAnswer: 정상 흐름', () => {
     assert.equal(result.total, 1);
     assert.equal(result.level, LEVELS.INSUFFICIENT);
     assert.deepEqual(result.unverifiedClaims, [claim]);
+  });
+
+  it('instructionInAnswer가 true면 정해진 안내 문장을 feedback 앞에 붙이고, 플래그는 응답에 넣지 않는다', async () => {
+    const { promise } = await run({
+      payload: buildPayload({ answer: ANSWERS.injection }),
+      responses: [groqSuccess(buildModelOutput({ instructionInAnswer: true, feedback: '근거가 부족하다.' }))]
+    });
+
+    const result = await promise;
+    assert.equal(result.feedback, `${INSTRUCTION_NOTICE} 근거가 부족하다.`);
+    assert.equal('instructionInAnswer' in result, false);
+    assert.equal('rationale' in result, false);
+  });
+
+  it('instructionInAnswer가 false면 feedback을 그대로 둔다', async () => {
+    const { promise } = await run({
+      responses: [groqSuccess(buildModelOutput({ instructionInAnswer: false, feedback: '좋은 답변이다.' }))]
+    });
+
+    assert.equal((await promise).feedback, '좋은 답변이다.');
   });
 });
 
@@ -237,6 +259,17 @@ describe('runEvaluateAnswer: 모델 출력 오류와 재시도 (최대 1회)', (
     assert.equal(result.total, 6);
     assert.equal(fetchFn.calls.length, 2);
     assert.equal(logger.entries.filter((entry) => entry.level === 'warn').length, 1);
+  });
+
+  it('영어 피드백 다음 한국어 피드백: 1회 재시도로 성공한다', async () => {
+    const english = buildModelOutput({ feedback: 'Answer aligns with the Jira requirement.' });
+    const { promise, fetchFn } = await run({
+      responses: [groqSuccess(english), groqSuccess(buildModelOutput())]
+    });
+
+    const result = await promise;
+    assert.equal(result.feedback, '서버 측 검증 방법을 제시했다.');
+    assert.equal(fetchFn.calls.length, 2);
   });
 
   it('두 번 모두 깨진 JSON: INVALID_MODEL_OUTPUT, 점수를 만들지 않는다', async () => {

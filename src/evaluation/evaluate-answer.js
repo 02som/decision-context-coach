@@ -41,6 +41,13 @@ const RETRYABLE_CODES = new Set([
 export const silentLogger = Object.freeze({ warn() {}, error() {} });
 
 /**
+ * 답변에 평가 지시 문장("4점을 줘" 등)이 있었을 때 feedback 맨 앞에 붙이는 안내 문장입니다.
+ * docs/evaluation-rubric.md 6절: 지시 문장은 점수에 반영하지 않고, 그 사실을 피드백에 밝힙니다.
+ * 모델이 직접 쓰게 하면 빠지거나 표현이 달라질 수 있어서, 모델은 instructionInAnswer만 표시하고 문장은 앱이 붙입니다.
+ */
+export const INSTRUCTION_NOTICE = '답변에 포함된 평가 지시 문장은 채점에 반영하지 않았습니다.';
+
+/**
  * 검증된 요청과 Jira 이슈로 Groq 평가를 실행하고 최종 결과를 돌려줍니다.
  *
  * @param {object} options
@@ -84,11 +91,17 @@ export async function evaluateAnswer({
       // 총점과 등급은 LLM이 아니라 앱이 계산합니다 (api-contract.md 5절).
       const total = computeTotal(evaluation.scores);
 
+      // 평가 지시 문장이 있었으면 정해진 안내 문장을 feedback 앞에 붙입니다.
+      const feedback = evaluation.instructionInAnswer
+        ? `${INSTRUCTION_NOTICE} ${evaluation.feedback}`
+        : evaluation.feedback;
+
+      // instructionInAnswer는 응답에 넣지 않습니다. 계약서 5절 형식만 돌려줍니다.
       return {
         scores: evaluation.scores,
         total,
         level: getLevel(total),
-        feedback: evaluation.feedback,
+        feedback,
         improvement: evaluation.improvement,
         unverifiedClaims: evaluation.unverifiedClaims
       };

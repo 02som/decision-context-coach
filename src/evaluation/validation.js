@@ -164,6 +164,24 @@ export function normalizeIssueContext(issue) {
 }
 
 /**
+ * 문장이 주로 한국어로 쓰였는지 확인합니다.
+ *
+ * 사용자 화면과 Jira 댓글은 한국어이므로, 모델이 영어로 쓴 피드백은 형식 오류로 보고 재시도합니다.
+ * 기술 용어(JWT, API, Redis 등)는 영어로 섞여도 되도록, 한글 음절 수가 영문 글자 수의 1/3 이상이면 통과시킵니다.
+ * - "서버에서 JWT 토큰을 검증합니다." → 한글 11, 영문 3 → 통과
+ * - "Answer aligns with the Jira requirement for 권한 검증." → 한글 4, 영문 약 35 → 실패
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isMostlyKorean(text) {
+  const hangulCount = (text.match(/[가-힣]/g) || []).length;
+  const latinCount = (text.match(/[A-Za-z]/g) || []).length;
+
+  return hangulCount > 0 && hangulCount * 3 >= latinCount;
+}
+
+/**
  * INVALID_MODEL_OUTPUT 에러를 만드는 짧은 도우미입니다.
  * reason에는 어떤 검사에서 실패했는지만 적고, LLM 출력 내용은 넣지 않습니다.
  *
@@ -182,11 +200,15 @@ function invalidOutput(reason) {
  * - feedback, improvement: 비어 있지 않은 문자열
  * - unverifiedClaims: 문자열 배열 (빈 배열 가능)
  *
- * 정의되지 않은 필드(예: LLM이 임의로 넣은 total)는 결과에 포함하지 않고 버립니다.
+ * 그 밖의 필드:
+ * - rationale(점수 근거): 채점 정확도를 높이려고 모델에게 쓰게 하는 필드입니다. 화면에 보여 주지 않으므로 버립니다.
+ * - instructionInAnswer: 답변에 평가 지시 문장이 있었는지 나타냅니다. 정확히 true일 때만 true로 보고,
+ *   없거나 다른 값이면 false로 봅니다. 이 값만으로 점수가 바뀌지는 않습니다.
+ * - 정의되지 않은 필드(예: LLM이 임의로 넣은 total)는 결과에 포함하지 않고 버립니다.
  * 총점과 등급은 이 함수 밖에서 앱이 계산합니다.
  *
  * @param {string} content
- * @returns {{ scores: { accuracy: number, evidence: number, explanation: number }, feedback: string, improvement: string, unverifiedClaims: string[] }}
+ * @returns {{ scores: { accuracy: number, evidence: number, explanation: number }, feedback: string, improvement: string, unverifiedClaims: string[], instructionInAnswer: boolean }}
  * @throws {EvaluationError} INVALID_MODEL_OUTPUT
  */
 export function parseEvaluationOutput(content) {
@@ -228,6 +250,15 @@ export function parseEvaluationOutput(content) {
     throw invalidOutput('improvement is empty');
   }
 
+  // 화면과 Jira 댓글에 그대로 나가는 문장이므로 한국어여야 합니다. 영어면 재시도 대상이 됩니다.
+  if (!isMostlyKorean(feedback)) {
+    throw invalidOutput('feedback is not written in Korean');
+  }
+
+  if (!isMostlyKorean(improvement)) {
+    throw invalidOutput('improvement is not written in Korean');
+  }
+
   // unverifiedClaims: 문자열 배열이어야 합니다.
   // 빈 문자열 항목은 의미가 없으므로 버리고, 문자열이 아닌 항목이 있으면 실패시킵니다.
   if (!Array.isArray(parsed.unverifiedClaims)) {
@@ -248,5 +279,7 @@ export function parseEvaluationOutput(content) {
     }
   }
 
-  return { scores, feedback, improvement, unverifiedClaims };
+  const instructionInAnswer = parsed.instructionInAnswer === true;
+
+  return { scores, feedback, improvement, unverifiedClaims, instructionInAnswer };
 }

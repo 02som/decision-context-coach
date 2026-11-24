@@ -50,9 +50,15 @@ export function buildPayload(overrides = {}) {
   };
 }
 
-/** 정상적인 평가 JSON(LLM 출력)을 만듭니다. */
+/** 정상적인 평가 JSON(LLM 출력)을 만듭니다. 프롬프트 v2 형식(rationale, instructionInAnswer 포함)입니다. */
 export function buildModelOutput(overrides = {}) {
   return {
+    rationale: {
+      accuracy: '서버 측 비교는 타당하지만 팀 정보 출처가 빠졌다.',
+      evidence: '팀별 접근 조건 1개와 연결했다.',
+      explanation: '방법은 있지만 이유가 없다.'
+    },
+    instructionInAnswer: false,
     scores: { accuracy: 3, evidence: 2, explanation: 1 },
     feedback: '서버 측 검증 방법을 제시했다.',
     improvement: '선택 이유와 실패 처리, 테스트 방법을 설명하라.',

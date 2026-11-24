@@ -81,8 +81,23 @@ describe('buildEvaluationMessages', () => {
   });
 
   it('system 프롬프트에 세 채점 항목과 출력 필드가 정의되어 있다', () => {
-    for (const keyword of ['accuracy', 'evidence', 'explanation', 'feedback', 'improvement', 'unverifiedClaims']) {
+    for (const keyword of [
+      'accuracy',
+      'evidence',
+      'explanation',
+      'feedback',
+      'improvement',
+      'unverifiedClaims',
+      'rationale',
+      'instructionInAnswer'
+    ]) {
       assert.ok(EVALUATION_SYSTEM_PROMPT.includes(keyword), `${keyword} should be in the system prompt`);
     }
+  });
+
+  it('보정 예시는 테스트 이슈(FLOW-1)와 다른 이슈를 쓴다 (테스트 정답 유출 방지)', () => {
+    assert.equal(EVALUATION_SYSTEM_PROMPT.includes(ISSUE.key), false);
+    assert.equal(EVALUATION_SYSTEM_PROMPT.includes(ISSUE.summary), false);
+    assert.equal(EVALUATION_SYSTEM_PROMPT.includes(ANSWERS.sample), false);
   });
 });

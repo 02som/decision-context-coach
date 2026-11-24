@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { ERROR_CODES, EvaluationError } from '../../src/evaluation/errors.js';
 import {
   MAX_ANSWER_LENGTH,
+  isMostlyKorean,
   normalizeIssueContext,
   parseEvaluationOutput,
   validateEvaluationRequest
@@ -91,6 +92,28 @@ describe('validateEvaluationRequest', () => {
   });
 });
 
+describe('isMostlyKorean', () => {
+  it('기술 용어가 섞인 한국어 문장은 통과시킨다', () => {
+    for (const text of [
+      '서버에서 JWT 토큰을 검증합니다.',
+      'Redis 캐시 TTL을 60초로 두는 이유를 설명하세요.',
+      '403 응답과 표준 오류 메시지를 반환하세요.'
+    ]) {
+      assert.equal(isMostlyKorean(text), true, text);
+    }
+  });
+
+  it('영어 문장과 한글이 없는 문장은 거부한다', () => {
+    for (const text of [
+      'Answer aligns with the Jira requirement for 권한 검증.',
+      'Provide a detailed explanation of the verification process.',
+      '12345 !!!'
+    ]) {
+      assert.equal(isMostlyKorean(text), false, text);
+    }
+  });
+});
+
 describe('normalizeIssueContext', () => {
   it('description이 없으면 빈 문자열로 정규화한다', () => {
     assert.deepEqual(normalizeIssueContext({ key: 'FLOW-1', summary: ' 제목 ' }), {
@@ -118,11 +141,12 @@ describe('parseEvaluationOutput', () => {
       scores: { accuracy: 3, evidence: 2, explanation: 1 },
       feedback: '좋은 답변이다.',
       improvement: output.improvement,
-      unverifiedClaims: ['Keycloak 사용 여부는 확인할 수 없다.']
+      unverifiedClaims: ['Keycloak 사용 여부는 확인할 수 없다.'],
+      instructionInAnswer: false
     });
   });
 
-  it('LLM이 임의로 넣은 필드(total, level 등)는 버린다', () => {
+  it('rationale과 LLM이 임의로 넣은 필드(total, level 등)는 버린다', () => {
     const output = {
       ...buildModelOutput(),
       total: 12,
@@ -131,8 +155,29 @@ describe('parseEvaluationOutput', () => {
     };
 
     const parsed = parseEvaluationOutput(JSON.stringify(output));
-    assert.deepEqual(Object.keys(parsed), ['scores', 'feedback', 'improvement', 'unverifiedClaims']);
+    assert.deepEqual(Object.keys(parsed), [
+      'scores',
+      'feedback',
+      'improvement',
+      'unverifiedClaims',
+      'instructionInAnswer'
+    ]);
     assert.deepEqual(parsed.scores, { accuracy: 3, evidence: 2, explanation: 1 });
+  });
+
+  it('instructionInAnswer는 정확히 true일 때만 true로 본다', () => {
+    const cases = [
+      [true, true],
+      [false, false],
+      ['true', false],
+      [1, false],
+      [undefined, false]
+    ];
+
+    for (const [value, expected] of cases) {
+      const output = buildModelOutput({ instructionInAnswer: value });
+      assert.equal(parseEvaluationOutput(JSON.stringify(output)).instructionInAnswer, expected, String(value));
+    }
   });
 
   it('빈 문자열 claim은 버린다', () => {
@@ -163,6 +208,18 @@ describe('parseEvaluationOutput', () => {
 
   it('feedback·improvement가 비어 있으면 거부한다', () => {
     for (const overrides of [{ feedback: '' }, { feedback: '  ' }, { improvement: '' }, { improvement: 3 }]) {
+      assertEvaluationError(
+        () => parseEvaluationOutput(JSON.stringify(buildModelOutput(overrides))),
+        ERROR_CODES.INVALID_MODEL_OUTPUT
+      );
+    }
+  });
+
+  it('feedback·improvement가 영어로 쓰였으면 거부한다 (실제 Groq v2에서 관찰된 문장)', () => {
+    const englishFeedback = 'Answer succinctly addresses the question and aligns with the Jira requirement for 권한 검증.';
+    const englishImprovement = 'Explain why comparing user and target teams is the chosen approach.';
+
+    for (const overrides of [{ feedback: englishFeedback }, { improvement: englishImprovement }]) {
       assertEvaluationError(
         () => parseEvaluationOutput(JSON.stringify(buildModelOutput(overrides))),
         ERROR_CODES.INVALID_MODEL_OUTPUT
