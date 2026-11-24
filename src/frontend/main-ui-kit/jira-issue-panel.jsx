@@ -286,29 +286,7 @@ const App = () => {
       setAnalyzing(false);
     }
   };
-  const getAnalysisSection = (text, sectionNumber) => {
-  if (typeof text !== 'string') return '';
 
-  const escaped = text
-    .replace(/\*\*/g, '')
-    .replace(/\r/g, '');
-
-  const nextNumber = sectionNumber + 1;
-  const startPattern = new RegExp(
-    `(?:^|\\n)\\s*${sectionNumber}\\.\\s*`
-  );
-  const nextPattern = new RegExp(
-    `(?:^|\\n)\\s*${nextNumber}\\.\\s*`
-  );
-
-  const start = escaped.search(startPattern);
-  if (start === -1) return '';
-
-  const remaining = escaped.slice(start).replace(startPattern, '');
-  const end = remaining.search(nextPattern);
-
-  return (end === -1 ? remaining : remaining.slice(0, end)).trim();
-};
   
   const handleFeedback = () => {
     if (!answer.trim()) {
@@ -334,14 +312,20 @@ const handleSaveToJira = async () => {
       `Issue: ${issue.key}`,
       `Title: ${issue.fields.summary}`,
       '',
-      'Suggested Decision (Mock):',
-      mockResult.decision,
+      'Suggested Decision (Groq AI):',
+      analysis.decision,
       '',
-      'Potential Risk (Mock):',
-      mockResult.risk,
+      'Potential Risk (Groq AI):',
+      analysis.risk,
+      '',
+      'Technical Considerations:',
+      analysis.technicalConsiderations,
+      '',
+      'Missing Information:',
+      analysis.missingInformation,
       '',
       'Technical Question:',
-      mockResult.question,
+      analysis.question,
       '',
       'User Answer:',
       answer,
@@ -403,11 +387,7 @@ const handleSaveToJira = async () => {
 
 
   const mockResult = issue ? createMockAnalysis(issue) : null;
-  const aiDecision = getAnalysisSection(analysis, 2);
-  const aiTechnicalDetails = getAnalysisSection(analysis, 3);
-  const aiMissingInfo = getAnalysisSection(analysis, 4);
-  const aiQuestion = getAnalysisSection(analysis, 5);
-
+  
 
   return (
     <Stack space="space.200">
@@ -456,36 +436,29 @@ const handleSaveToJira = async () => {
   )}
 
   <Heading size="small">Suggested Decision (Groq AI)</Heading>
-  <Text>{aiDecision || 'AI 분석 결과에서 의사결정 항목을 찾지 못했습니다.'}</Text>
+  <Text>{analysis.decision}</Text>
+
+  <Heading size="small">Potential Risk (Groq AI)</Heading>
+  <Text>{analysis.risk}</Text>
 
   <Heading size="small">Technical Considerations (Groq AI)</Heading>
-  <Text>{aiTechnicalDetails || '기술적 고려사항을 추출하지 못했습니다.'}</Text>
+  <Text>{analysis.technicalConsiderations}</Text>
 
-  <Heading size="small">Missing Information</Heading>
+  <Heading size="small">Missing Information (Groq AI)</Heading>
+  <Text>{analysis.missingInformation}</Text>
 
-  {!mockResult.hasDescription ? (
-    <Text>
-      The issue description is missing.
-      Add requirements, constraints, and acceptance criteria.
-    </Text>
-  ) : (
-    <Text>
-      Technical constraints and acceptance criteria
-      have not been independently verified.
-    </Text>
-  )}
-
+  
   <Text>
     Disclaimer: Jira context is retrieved from the issue.
-    Decisions and risks are predefined suggestions,
-    not verified conclusions.
+    Decisions, risks, and questions are AI-generated suggestions,
+    not independently verified conclusions.
   </Text>
 </Stack>
 
 
       <Heading size="small">2. Technical Question</Heading>
 
-        <Text>{aiQuestion || 'AI가 기술 질문을 생성하지 못했습니다.'}</Text>
+        <Text>{analysis.question || 'AI가 기술 질문을 생성하지 못했습니다.'}</Text>
 
         <Heading size="small">3. Your Answer</Heading>
         <TextArea
