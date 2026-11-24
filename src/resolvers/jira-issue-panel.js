@@ -2,6 +2,7 @@ import Resolver from '@forge/resolver';
 import api, { route } from '@forge/api';
 import { runEvaluateAnswer } from '../evaluation/evaluate-answer.js';
 import { requestGroqAnalysis } from '../analysis/groq-client.js';
+import { adfToPlainText, toJiraContext } from './jira-description.js';
 import {
   ERROR_CODES,
   EvaluationError,
@@ -9,25 +10,6 @@ import {
 } from '../evaluation/errors.js';
 
 const resolver = new Resolver();
-
-function extractText(node) {
-  if (!node) return '';
-  if (typeof node === 'string') return node;
-
-  if (Array.isArray(node)) {
-    return node.map(extractText).join('\n');
-  }
-
-  const ownText = typeof node.text === 'string'
-    ? node.text
-    : '';
-
-  const childText = Array.isArray(node.content)
-    ? node.content.map(extractText).join('\n')
-    : '';
-
-  return [ownText, childText].filter(Boolean).join('\n');
-}
 
 resolver.define('analyzeIssue', async ({ payload, context }) => {
   const issueKey =
@@ -54,11 +36,8 @@ resolver.define('analyzeIssue', async ({ payload, context }) => {
 
   const issue = await jiraResponse.json();
 
-  const issueData = {
-    key: issue.key,
-    summary: issue.fields.summary,
-    description: extractText(issue.fields.description)
-  };
+  // api-contract.md 2절 형식으로 정제 (DFAS-152). key·summary가 없으면 여기서 멈춥니다.
+  const issueData = toJiraContext(issue);
 
     // Groq API 호출
     const content = await requestGroqAnalysis({
@@ -191,7 +170,7 @@ resolver.define('analyzeIssue', async ({ payload, context }) => {
  *
  * - asUser(): 현재 사용자의 권한으로 조회하므로, 사용자가 볼 수 없는 이슈는 평가에 쓸 수 없습니다.
  * - 클라이언트가 보낸 이슈 내용은 믿지 않고, 이 함수가 Jira에서 다시 가져온 값만 평가 근거로 씁니다.
- * - ADF 형식의 description은 analyzeIssue와 같은 extractText()로 평문으로 바꿉니다.
+ * - ADF 형식의 description은 analyzeIssue와 같은 adfToPlainText()로 평문으로 바꿉니다 (jira-description.js).
  *
  * @param {string} issueKey
  * @returns {Promise<{ key: string, summary: string, description: string }>}
@@ -212,7 +191,7 @@ async function loadIssueForEvaluation(issueKey) {
   return {
     key: issue.key,
     summary: issue.fields?.summary,
-    description: extractText(issue.fields?.description)
+    description: adfToPlainText(issue.fields?.description)
   };
 }
 
