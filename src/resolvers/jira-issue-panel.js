@@ -162,6 +162,17 @@ resolver.define('analyzeIssue', async ({ payload, context }) => {
   } catch {
     throw new Error('Groq 분석 결과가 올바른 JSON 형식이 아닙니다.');
   }
+  analysis.decision = 123;
+
+    if (
+    !analysis ||
+    typeof analysis !== 'object' ||
+    Array.isArray(analysis)
+  ) {
+    throw new Error(
+      'AI 분석 결과가 올바른 JSON 객체가 아닙니다.'
+    );
+  }
 
   const requiredFields = [
     'decision',
@@ -178,6 +189,16 @@ resolver.define('analyzeIssue', async ({ payload, context }) => {
     ) {
       throw new Error(`AI 분석 결과에 필수 항목이 없습니다: ${field}`);
     }
+  }
+
+  const unexpectedFields = Object.keys(analysis).filter(
+    (field) => !requiredFields.includes(field)
+  );
+
+  if (unexpectedFields.length > 0) {
+    throw new Error(
+      'AI 분석 결과에 정의되지 않은 항목이 포함되어 있습니다.'
+    );
   }
 
   return analysis;
