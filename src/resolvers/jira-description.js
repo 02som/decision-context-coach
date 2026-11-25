@@ -167,8 +167,8 @@ function tableToText(node) {
       return cells
         .map((cell) => {
           const cellBlocks = Array.isArray(cell?.content) ? cell.content : [];
-          // 칸 안의 여러 문단은 한 줄로 이어 붙입니다
-          return cellBlocks.map((block) => blockToText(block, 0)).filter(Boolean).join(' ');
+          // 칸 안의 여러 문단은 한 줄로 이어 붙이고, 칸 앞뒤 공백은 지웁니다 (R5)
+          return cellBlocks.map((block) => blockToText(block, 0)).filter(Boolean).join(' ').trim();
         })
         .join(' | ');
     })

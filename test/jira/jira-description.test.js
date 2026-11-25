@@ -74,6 +74,12 @@ describe('adfToPlainText', () => {
     assert.equal(adfToPlainText(adf), '안 | 장점\nOAuth | 표준');
   });
 
+  it('표 칸 앞뒤 공백은 지운다 (R5, DFAS-156 실제 이슈에서 발견)', () => {
+    const cell = (text) => ({ type: 'tableCell', content: [p(t(text))] });
+    const table = { type: 'table', content: [{ type: 'tableRow', content: [cell('비밀번호 보관 '), cell(' 필요 없음 ')] }] };
+    assert.equal(adfToPlainText(doc(table)), '비밀번호 보관 | 필요 없음');
+  });
+
   it('링크는 글자, 링크 카드는 주소, 첨부는 [첨부 파일] (R4)', () => {
     const adf = doc(
       p(t('문서', [{ type: 'link', attrs: { href: 'https://example.com' } }]), t(' 참고')),
