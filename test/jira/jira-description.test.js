@@ -1,13 +1,17 @@
 /**
  * Jira 텍스트 정제 모듈 테스트 (WBS 3.2 / DFAS-152)
  *
- * Jira·Forge 없이 ADF 예시를 넣어 규칙(R1~R5)대로 바뀌는지 확인합니다.
+ * Jira·Forge 없이 ADF 예시를 넣어 규칙(R1~R6)대로 바뀌는지 확인합니다.
  */
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { adfToPlainText, toJiraContext } from '../../src/resolvers/jira-description.js';
+import {
+  adfToPlainText,
+  toJiraContext,
+  DESCRIPTION_MAX_CHARS
+} from '../../src/resolvers/jira-description.js';
 
 /** 짧게 ADF를 만드는 도우미 */
 const doc = (...content) => ({ type: 'doc', version: 1, content });
@@ -102,6 +106,56 @@ describe('adfToPlainText', () => {
   });
 });
 
+describe('adfToPlainText 긴 설명 처리 (R6)', () => {
+  const NOTICE = /\n\n\(이하 생략: 설명이 길어 원문 \d+자 중 앞 \d+자만 포함했습니다\.\)$/;
+
+  it('최대 길이 이하면 자르지 않고 안내도 붙이지 않는다', () => {
+    const text = '가'.repeat(50);
+    assert.equal(adfToPlainText(text, { maxChars: 50 }), text);
+  });
+
+  it('최대 길이를 넘으면 앞부분만 남기고 원문 길이를 안내한다', () => {
+    const text = '가'.repeat(80);
+    const result = adfToPlainText(text, { maxChars: 50 });
+
+    assert.ok(result.startsWith('가'.repeat(50)));
+    assert.match(result, NOTICE);
+    assert.ok(result.includes('원문 80자 중 앞 50자'));
+  });
+
+  it('문장 중간이 아니라 문장 끝에서 자른다 (기준 1)', () => {
+    const first = 'OAuth로 결정했다. '.repeat(4).trimEnd();
+    const text = `${first} 세션 로그인은 대안으로만 남긴다.`;
+    const result = adfToPlainText(text, { maxChars: 60 });
+
+    assert.ok(result.startsWith(`${first}\n\n(이하 생략`));
+  });
+
+  it('최대 길이 80% 뒤에 문장 끝이 없으면 최대 길이에서 그대로 자른다', () => {
+    const text = `짧다. ${'가'.repeat(100)}`;
+    const result = adfToPlainText(text, { maxChars: 50 });
+
+    assert.ok(result.includes('앞 50자'));
+  });
+
+  it('코드 블록 안에서 잘리면 코드 블록을 닫아 준다', () => {
+    const code = { type: 'codeBlock', content: [t('x\n'.repeat(40))] };
+    const result = adfToPlainText(doc(p(t('설명')), code), { maxChars: 30 });
+    const fences = result.split('\n').filter((line) => line.trim() === '```').length;
+
+    assert.equal(fences % 2, 0);
+    assert.match(result, NOTICE);
+  });
+
+  it('기본 최대 길이는 DESCRIPTION_MAX_CHARS이고 ADF 설명에도 적용된다', () => {
+    const long = doc(p(t('나'.repeat(DESCRIPTION_MAX_CHARS + 10))));
+    const result = adfToPlainText(long);
+
+    assert.match(result, NOTICE);
+    assert.ok(result.includes(`앞 ${DESCRIPTION_MAX_CHARS}자`));
+  });
+});
+
 describe('toJiraContext', () => {
   it('Jira 응답을 2절 형식으로 만든다', () => {
     const issue = { key: 'DFAS-999', fields: { summary: '  로그인 방식 결정 ', description: doc(p(t('내용'))) } };
@@ -116,6 +170,13 @@ describe('toJiraContext', () => {
   it('설명이 없으면 description은 빈 문자열', () => {
     const issue = { key: 'DFAS-999', fields: { summary: '제목', description: null } };
     assert.equal(toJiraContext(issue).description, '');
+  });
+
+  it('분석 경로도 평가 경로와 같은 기준으로 자른다 (R6)', () => {
+    const description = doc(p(t('다'.repeat(DESCRIPTION_MAX_CHARS + 10))));
+    const issue = { key: 'DFAS-999', fields: { summary: '제목', description } };
+
+    assert.equal(toJiraContext(issue).description, adfToPlainText(description));
   });
 
   it('key나 summary가 없으면 오류 (api-contract.md 2절)', () => {

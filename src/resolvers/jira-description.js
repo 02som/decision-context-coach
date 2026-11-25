@@ -12,6 +12,9 @@
  * - R4: 제목은 텍스트만 / 코드 블록은 ``` 로 감쌈 / 표는 한 행 한 줄, 칸 사이 " | "
  *       / 링크 카드는 주소 / 이미지·첨부는 "[첨부 파일]"
  * - R5: 앞뒤 공백 제거, 연속 빈 줄은 하나로 (코드 블록 안은 건드리지 않음)
+ * - R6: 설명이 DESCRIPTION_MAX_CHARS를 넘으면 앞부분부터 남기고 자른 뒤,
+ *       잘렸다는 사실과 원문 길이를 끝에 적는다 (AI가 뒷부분을 '확인 불가'로 볼 수 있게)
+ *       분석·평가 두 경로가 모두 이 함수를 거치므로 같은 기준이 적용된다
  *
  * 멘션(@이름)은 기존 extractText와 같이 이름을 내보내지 않습니다.
  */
@@ -27,6 +30,19 @@ const CODE_FENCE = '```';
 
 /** 첨부 파일 자리 표시 (R4) */
 const ATTACHMENT_PLACEHOLDER = '[첨부 파일]';
+
+/**
+ * 설명 최대 글자 수 (R6).
+ * Groq 무료 플랜 분당 8,000토큰 안에 평가 요청(프롬프트·결정 카드·질문·답변·응답 자리)이
+ * 들어가도록 잡은 추정값입니다. DFAS-153에서 2,000/3,000/4,000자를 비교해 확정합니다.
+ */
+export const DESCRIPTION_MAX_CHARS = 3000;
+
+/**
+ * 자를 때 문장 끝이나 줄바꿈을 찾는 범위 (R6, 기준 1 "문장이 온전해야 한다").
+ * 최대 길이의 80% 뒤에서 찾지 못하면 최대 길이에서 그대로 자릅니다.
+ */
+const BOUNDARY_MIN_RATIO = 0.8;
 
 /**
  * 인라인 노드(문단 안의 조각) 하나를 글자로 바꿉니다.
@@ -254,22 +270,80 @@ function tidyWhitespace(text) {
 }
 
 /**
- * Jira description(ADF)을 일반 텍스트로 바꿉니다.
- * 설명이 없거나 비어 있으면 빈 문자열을 돌려줍니다 (api-contract.md 2절).
+ * 코드 블록 시작·끝 표시 줄의 개수를 셉니다. 홀수면 코드 블록 안에서 끝난 것입니다.
  *
- * @param {unknown} description issue.fields.description 값 (ADF 객체, 문자열 또는 null)
+ * @param {string} text
+ * @returns {number}
+ */
+function countCodeFences(text) {
+  return text.split('\n').filter((line) => line.trim() === CODE_FENCE).length;
+}
+
+/**
+ * 잘라도 되는 마지막 위치(줄바꿈 또는 문장 끝 바로 뒤)를 찾습니다.
+ *
+ * @param {string} text 최대 길이로 미리 자른 글
+ * @returns {number} 그 위치까지 남기면 되는 글자 수 (없으면 -1)
+ */
+function lastBoundary(text) {
+  let last = text.lastIndexOf('\n');
+  const sentenceEnd = /[.!?。](?=\s)/g;
+  let match;
+
+  while ((match = sentenceEnd.exec(text)) !== null) {
+    last = Math.max(last, match.index + 1);
+  }
+
+  return last;
+}
+
+/**
+ * 긴 설명을 앞부분부터 남기고 자른 뒤 안내 문장을 붙입니다 (R6).
+ *
+ * @param {string} text 정리가 끝난 설명
+ * @param {number} maxChars 최대 글자 수
  * @returns {string}
  */
-export function adfToPlainText(description) {
+function truncateDescription(text, maxChars) {
+  if (text.length <= maxChars) return text;
+
+  let kept = text.slice(0, maxChars);
+  const boundary = lastBoundary(kept);
+
+  if (boundary >= maxChars * BOUNDARY_MIN_RATIO) kept = kept.slice(0, boundary);
+
+  kept = kept.trimEnd();
+  const keptLength = kept.length;
+
+  // 코드 블록 중간에서 잘렸으면 닫아 줍니다
+  if (countCodeFences(kept) % 2 === 1) kept += `\n${CODE_FENCE}`;
+
+  return `${kept}\n\n(이하 생략: 설명이 길어 원문 ${text.length}자 중 앞 ${keptLength}자만 포함했습니다.)`;
+}
+
+/**
+ * Jira description(ADF)을 일반 텍스트로 바꿉니다.
+ * 설명이 없거나 비어 있으면 빈 문자열을 돌려줍니다 (api-contract.md 2절).
+ * 설명이 maxChars를 넘으면 앞부분만 남기고 잘렸다는 안내를 붙입니다 (R6).
+ *
+ * @param {unknown} description issue.fields.description 값 (ADF 객체, 문자열 또는 null)
+ * @param {{ maxChars?: number }} [options] maxChars: 최대 글자 수 (기본 DESCRIPTION_MAX_CHARS, 테스트용)
+ * @returns {string}
+ */
+export function adfToPlainText(description, { maxChars = DESCRIPTION_MAX_CHARS } = {}) {
   if (description == null) return '';
 
-  // 예전 API(v2)처럼 이미 문자열로 오는 경우
-  if (typeof description === 'string') return tidyWhitespace(description);
+  let text = '';
 
-  if (typeof description !== 'object') return '';
+  if (typeof description === 'string') {
+    // 예전 API(v2)처럼 이미 문자열로 오는 경우
+    text = tidyWhitespace(description);
+  } else if (typeof description === 'object') {
+    const blocks = Array.isArray(description.content) ? description.content : [];
+    text = tidyWhitespace(blocksToText(blocks));
+  }
 
-  const blocks = Array.isArray(description.content) ? description.content : [];
-  return tidyWhitespace(blocksToText(blocks));
+  return truncateDescription(text, maxChars);
 }
 
 /**
