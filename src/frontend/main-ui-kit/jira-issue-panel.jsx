@@ -7,10 +7,17 @@ import ForgeReconciler, {
   Button,
   TextArea,
   Spinner,
-  SectionMessage
+  SectionMessage,
+  Box,
+  Inline,
+  Lozenge,
+  Icon,
+  Image,
+  xcss
 } from '@forge/react';
 
 import { requestJira, view, invoke } from '@forge/bridge';
+import appIcon from '../../../static/icons/icon.png';
 
 const extractJiraText = (node) => {
   if (!node) return '';
@@ -112,6 +119,381 @@ const createMockAnalysis = (issue) => {
 // 답변 평가는 백엔드 resolver의 evaluateAnswer(Groq AI)가 합니다 (WBS 2.6 / DFAS-138).
 // 예전 규칙 기반 평가(evaluateMockAnswer)는 삭제했습니다. AI 평가가 실패해도 규칙 기반 점수로 대신하지 않습니다.
 // 채점 기준: docs/evaluation-rubric.md, 응답 형식: docs/api-contract.md 5절
+// Decision Context Coach UI styles
+
+const cardStyle = xcss({
+  backgroundColor: 'elevation.surface.raised',
+  borderColor: 'color.border',
+  borderWidth: 'border.width',
+  borderStyle: 'solid',
+  borderRadius: 'radius.large',
+  padding: 'space.200'
+});
+
+const accentCardStyle = xcss({
+  backgroundColor: 'elevation.surface.raised',
+  borderColor: 'color.border',
+  borderWidth: 'border.width',
+  borderStyle: 'solid',
+  borderRadius: 'radius.medium',
+  padding: 'space.150'
+});
+
+const insetStyle = xcss({
+  backgroundColor: 'color.background.neutral',
+  borderRadius: 'radius.medium',
+  padding: 'space.200'
+});
+
+const tileStyle = xcss({
+  borderColor: 'color.border',
+  borderWidth: 'border.width',
+  borderStyle: 'solid',
+  borderRadius: 'radius.medium',
+  padding: 'space.150',
+  width: '100%',
+  minWidth: '0px',
+  flexGrow: 1
+});
+
+const trackStyle = xcss({
+  backgroundColor: 'color.background.neutral',
+  borderRadius: 'radius.small',
+  height: '10px',
+  width: '100%',
+  overflow: 'hidden'
+});
+
+const scoreColors = [
+  'color.background.neutral',
+  'color.background.accent.magenta.subtlest',
+  'color.background.accent.magenta.subtler',
+  'color.background.accent.magenta.subtle',
+  'color.background.accent.magenta.bolder'
+];
+
+const InfoTile = ({ title, content }) => {
+  const icons = {
+    'AI 제안': {
+      glyph: 'lightbulb',
+      color: 'color.icon.accent.magenta'
+    },
+    '잠재적 위험': {
+      glyph: 'warning',
+      color: 'color.icon.warning'
+    },
+    '기술적 고려 사항': {
+      glyph: 'settings',
+      color: 'color.icon.accent.blue'
+    },
+    '미확인 정보': {
+      glyph: 'information',
+      color: 'color.icon.subtle'
+    }
+  };
+
+  const icon = icons[title] || {
+    glyph: 'information',
+    color: 'color.icon.subtle'
+  };
+
+  return (
+    <Box xcss={tileStyle}>
+      <Stack space="space.100">
+        <Inline
+          space="space.100"
+          alignBlock="center"
+        >
+          <Icon
+            glyph={icon.glyph}
+            color={icon.color}
+            size="medium"
+            label=""
+          />
+          <Text weight="bold">{title}</Text>
+        </Inline>
+
+        <Text>{content || '확인 불가'}</Text>
+      </Stack>
+    </Box>
+  );
+};
+
+const ScoreBar = ({ label, score }) => {
+  const value = Math.max(
+    0, Math.min(4, Number(score) || 0)
+  );
+
+  const fillStyle = xcss({
+    backgroundColor: scoreColors[value],
+    width: `${value * 25}%`,
+    height: '10px',
+    borderRadius: 'radius.small'
+  });
+
+  return (
+    <Stack space="space.050">
+      <Inline spread="space-between">
+        <Text>{label}</Text>
+        <Text weight="bold">{value}/4</Text>
+      </Inline>
+
+      <Box xcss={trackStyle}>
+        <Box xcss={fillStyle} />
+      </Box>
+    </Stack>
+  );
+};
+
+// 기존 AI 응답의 결정 정보 분리
+const parseDecision = (decision) => {
+  const source = String(decision || '');
+
+  const evidence = source.match(
+    /Jira\s*근거\s*:\s*([\s\S]*?)(?=\/?\s*기술 선택 상태\s*:|\/?\s*AI 제안\s*:|$)/
+  );
+
+  const status = source.match(
+    /기술 선택 상태\s*:\s*([\s\S]*?)(?=\/?\s*AI 제안\s*:|$)/
+  );
+
+  const suggestion = source.match(
+    /AI 제안\s*:\s*([\s\S]*)/
+  );
+
+  return {
+    evidence: evidence?.[1]?.trim() || null,
+    status: status?.[1]?.trim() || null,
+    suggestion: suggestion?.[1]?.trim() || source
+  };
+};
+
+const DecisionCard = ({ analysis, issue, description }) => {
+  const [expanded, setExpanded] = useState(false);
+  const decision = parseDecision(analysis.decision);
+  const isUndecided =
+  !decision.status ||
+  /확인\s*불가|미확정|미결정|알 수 없음/.test(
+    decision.status
+  );
+  return (
+    <Box xcss={accentCardStyle}>
+      <Stack space="space.100">
+        <Inline space="space.100" alignBlock="center" alignInline="start">
+        <Box xcss={xcss({
+          width: '20px',
+          flexShrink: 0
+        })}>
+          <Image
+            src={appIcon}
+            alt="Decision Context Coach logo"
+            width="40px"
+          />
+        </Box>
+        <Heading size="medium">Decision Card</Heading>
+      </Inline>
+        <Text color="color.text.subtle">
+          {issue.key} · {issue.fields.summary}
+        </Text>
+
+        <Box xcss={insetStyle}>
+          <Inline spread="space-between" alignBlock="center">
+            <Text weight="bold" color="color.text.accent.magenta">
+              TECHNICAL DECISION
+            </Text>
+
+            {isUndecided && (
+              <Lozenge appearance="moved">
+                결정 미확정
+              </Lozenge>
+            )}
+          </Inline>
+
+          <Heading size="large">
+            {isUndecided
+              ? '기술 선택 검토 필요'
+              : decision.status}
+          </Heading>
+        </Box>
+
+        <Box xcss={cardStyle}>
+          <Stack space="space.100">
+            <Text weight="bold">Jira 근거 (AI 추출)</Text>
+            <Text>{decision.evidence || '확인 불가'}</Text>
+          </Stack>
+        </Box>
+
+        <Inline space="space.100" grow="fill">
+          <InfoTile
+            title="AI 제안"
+            content={decision.suggestion}
+          />
+
+          <InfoTile
+            title="잠재적 위험"
+            content={analysis.risk}
+          />
+        </Inline>
+
+        <Inline space="space.100" grow="fill">
+          <InfoTile
+            title="기술적 고려 사항"
+            content={analysis.technicalConsiderations}
+          />
+
+          <InfoTile
+            title="미확인 정보"
+            content={analysis.missingInformation}
+          />
+        </Inline>
+
+        <Button
+          appearance="subtle"
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? '▲ Jira 원문 접기' : '▼ Jira 원문 보기'}
+        </Button>
+
+        {expanded && (
+          <Box xcss={insetStyle}>
+            <Stack space="space.100">
+              <Text weight="bold">Verified Jira Context</Text>
+              <Text>
+                {description || 'No description provided in Jira.'}
+              </Text>
+            </Stack>
+          </Box>
+        )}
+
+        <Text color="color.text.subtle" size="small">
+          AI-generated analysis based on Jira context.
+          Not independently verified conclusions.
+        </Text>
+
+      </Stack>
+    </Box>
+  );
+};
+
+const LearningFeedback = ({ feedback }) => {
+  const appearance =
+    feedback.level === 'Strong'
+      ? 'success'
+      : feedback.level === 'Needs improvement'
+        ? 'moved'
+        : 'removed';
+
+  const totalFillStyle = xcss({
+    backgroundColor:
+      scoreColors[Math.ceil(feedback.total / 3)],
+    width: `${feedback.total / 12 * 100}%`,
+    height: '10px',
+    borderRadius: 'radius.small'
+  });
+
+  return (
+    <Box xcss={accentCardStyle}>
+      <Stack space="space.200">
+        <Inline space="space.100" alignBlock="center">
+        <Icon
+          glyph="chart-bar"
+          color="color.icon.accent.magenta"
+          size="medium"
+          label=""
+        />
+        <Heading size="medium">
+          AI Learning Feedback
+        </Heading>
+      </Inline>
+
+        <Inline space="space.200" grow="fill">
+
+          <Box xcss={tileStyle}>
+            <Stack
+              space="space.100"
+              alignInline="center"
+            >
+              <Text color="color.text.subtle">
+                TOTAL SCORE
+              </Text>
+
+              <Heading size="xxlarge">
+                {feedback.total}/12
+              </Heading>
+
+              <Lozenge appearance={appearance}>
+                {feedback.level}
+              </Lozenge>
+
+              <Box xcss={trackStyle}>
+                <Box xcss={totalFillStyle} />
+              </Box>
+            </Stack>
+          </Box>
+
+          <Box xcss={tileStyle}>
+            <Stack space="space.150">
+
+              <ScoreBar
+                label="Accuracy"
+                score={feedback.scores.accuracy}
+              />
+
+              <ScoreBar
+                label="Evidence"
+                score={feedback.scores.evidence}
+              />
+
+              <ScoreBar
+                label="Explanation"
+                score={feedback.scores.explanation}
+              />
+
+            </Stack>
+          </Box>
+        </Inline>
+
+        <Box xcss={insetStyle}>
+          <Stack space="space.200">
+
+            <Stack space="space.100">
+              <Heading size="small">AI 피드백</Heading>
+              <Text>{feedback.feedback}</Text>
+            </Stack>
+
+            <Stack space="space.100">
+              <Heading size="small">개선 방향</Heading>
+              <Text>{feedback.improvement}</Text>
+            </Stack>
+
+          </Stack>
+        </Box>
+
+        <Box xcss={cardStyle}>
+          <Stack space="space.100">
+            <Text weight="bold">
+              미확인 주장 (Jira)
+            </Text>
+
+            {feedback.unverifiedClaims.length > 0
+              ? feedback.unverifiedClaims.map(
+                  (claim, index) => (
+                    <Text key={index}>- {claim}</Text>
+                  )
+                )
+              : <Text>None</Text>}
+          </Stack>
+        </Box>
+
+        <Text size="small" color="color.text.subtle">
+          AI-generated learning feedback.
+          Scores are not verified facts about the code.
+        </Text>
+
+      </Stack>
+    </Box>
+  );
+};
 
 const App = () => {
   const [issue, setIssue] = useState(null);
@@ -242,8 +624,7 @@ const handleSaveToJira = async () => {
 
   try {
     const commentText = [
-      '[Decision Context Coach - Mock Evaluation]',
-      '',
+      '[Decision Context Coach - Groq AI Evaluation]',      '',
       `Issue: ${issue.key}`,
       `Title: ${issue.fields.summary}`,
       '',
@@ -333,8 +714,39 @@ const handleSaveToJira = async () => {
 
   return (
     <Stack space="space.200">
-      <Heading size="medium">Decision Context Coach</Heading>
-      <Text>AI analysis: Groq | Answer evaluation: Groq AI</Text>
+      <Box xcss={accentCardStyle}>
+        <Stack space="space.100">
+          <Inline
+            space="space.050"
+            alignBlock="center"
+            alignInline="start"
+            grow="hug"
+          >
+            <Box xcss={xcss({
+              width: '40px',
+              flexShrink: 0
+            })}>
+              <Image
+                src={appIcon}
+                alt="Decision Context Coach logo"
+                width="40px"
+              />
+            </Box>
+
+            <Heading size="medium">
+              Decision Context Coach
+            </Heading>
+          </Inline>
+          <Text color="color.text.subtle">
+            Understand decisions. Build technical reasoning.
+          </Text>
+
+          <Inline space="space.100">
+            <Lozenge appearance="new">Groq AI</Lozenge>
+            <Lozenge appearance="default">Jira Context</Lozenge>
+          </Inline>
+        </Stack>
+      </Box>
       {error && (
         <SectionMessage appearance="error">
           <Text>{error}</Text>
@@ -348,9 +760,11 @@ const handleSaveToJira = async () => {
 
           <Button
             appearance="primary"
+            iconBefore="lightbulb"
             onClick={handleAnalyze}
+            isDisabled={analyzing}
           >
-            Analyze Issue
+            {analyzing ? 'Analyzing...' : 'Analyze Issue'}
           </Button>
         </>
       )}
@@ -360,43 +774,11 @@ const handleSaveToJira = async () => {
       {analysis && mockResult && (
         <>
           
-      
-<Heading size="small">1. Decision Card</Heading>
-
-<Stack space="space.200">
-  <Heading size="small">Verified Jira Context</Heading>
-
-  <Text>Issue Key: {issue.key}</Text>
-  <Text>Issue Title: {issue.fields.summary}</Text>
-
-  <Heading size="small">Issue Description</Heading>
-
-  {mockResult.hasDescription ? (
-    <Text>{mockResult.descriptionText.slice(0, 1500)}</Text>
-  ) : (
-    <Text>No description provided in Jira.</Text>
-  )}
-
-  <Heading size="small">Suggested Decision (Groq AI)</Heading>
-  <Text>{analysis.decision}</Text>
-
-  <Heading size="small">Potential Risk (Groq AI)</Heading>
-  <Text>{analysis.risk}</Text>
-
-  <Heading size="small">Technical Considerations (Groq AI)</Heading>
-  <Text>{analysis.technicalConsiderations}</Text>
-
-  <Heading size="small">Missing Information (Groq AI)</Heading>
-  <Text>{analysis.missingInformation}</Text>
-
-  
-  <Text>
-    Disclaimer: Jira context is retrieved from the issue.
-    Decisions, risks, and questions are AI-generated suggestions,
-    not independently verified conclusions.
-  </Text>
-</Stack>
-
+      <DecisionCard
+        analysis={analysis}
+        issue={issue}
+        description={mockResult.descriptionText}
+      />
 
       <Heading size="small">2. Technical Question</Heading>
 
@@ -412,7 +794,11 @@ const handleSaveToJira = async () => {
           placeholder="Write your technical reasoning..."
         />
 
-        <Button onClick={handleFeedback} isDisabled={evaluating || !answer.trim()}>
+        <Button
+          iconBefore="chart-bar"
+          onClick={handleFeedback}
+          isDisabled={evaluating || !answer.trim()}
+        >
           {evaluating ? 'Evaluating...' : 'Evaluate Answer'}
         </Button>
 
@@ -422,33 +808,11 @@ const handleSaveToJira = async () => {
 
     {feedback && (
       <>
-        <Heading size="small">4. AI Feedback (Groq)</Heading>
+      <LearningFeedback feedback={feedback} />
 
-        {/* 총점과 등급은 백엔드가 계산한 값을 그대로 표시합니다 (api-contract.md 5절). */}
-        <Text>Total: {feedback.total} / 12 ({feedback.level})</Text>
-        <Text>Accuracy (정확성): {feedback.scores.accuracy} / 4</Text>
-        <Text>Evidence (근거): {feedback.scores.evidence} / 4</Text>
-        <Text>Explanation (설명 충실도): {feedback.scores.explanation} / 4</Text>
-
-        <Text>Feedback: {feedback.feedback}</Text>
-        <Text>Improvement: {feedback.improvement}</Text>
-
-        {/* Jira 이슈로 확인할 수 없는 주장은 사실처럼 보이지 않도록 따로 표시합니다. */}
-        <Text>Unverified claims (Jira로 확인 불가):</Text>
-        {feedback.unverifiedClaims.length > 0 ? (
-          feedback.unverifiedClaims.map((claim, index) => (
-            <Text key={index}>- {claim}</Text>
-          ))
-        ) : (
-          <Text>None</Text>
-        )}
-
-        <Text>
-          Note: AI-generated evaluation based only on the Jira issue text.
-          Scores are learning feedback, not verified facts about the code.
-        </Text>
         <Button
           appearance="primary"
+          iconBefore="check-circle"
           onClick={handleSaveToJira}
           isDisabled={saving}
         >
