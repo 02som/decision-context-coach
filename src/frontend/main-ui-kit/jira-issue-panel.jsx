@@ -279,8 +279,8 @@ const handleSaveToJira = async () => {
         ? feedback.unverifiedClaims.map(claim => `- ${claim}`).join('\n')
         : 'None',
       '',
-      'Disclaimer: Rule-based mock evaluation.',
-      'Factual correctness has not been verified.'
+      'Disclaimer: AI-generated analysis and evaluation based only on Jira issue text.',
+      'Scores are learning feedback, not verified facts about the code.'
     ].join('\n');
 
     const response = await requestJira(
@@ -412,7 +412,7 @@ const handleSaveToJira = async () => {
           placeholder="Write your technical reasoning..."
         />
 
-        <Button onClick={handleFeedback} isDisabled={evaluating}>
+        <Button onClick={handleFeedback} isDisabled={evaluating || !answer.trim()}>
           {evaluating ? 'Evaluating...' : 'Evaluate Answer'}
         </Button>
 
