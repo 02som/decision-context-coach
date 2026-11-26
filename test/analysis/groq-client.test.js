@@ -40,7 +40,7 @@ describe('requestGroqAnalysis', () => {
         })
       ),
       {
-        message: 'AI 분석 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+        message: 'AI analysis request failed. Please try again later.'
       }
     );
   });
@@ -49,7 +49,7 @@ describe('requestGroqAnalysis', () => {
     await assert.rejects(
       run(async () => mockResponse(429, {})),
       {
-        message: 'AI 서비스 요청이 많습니다. 잠시 후 다시 시도해 주세요.'
+        message: 'Too many AI requests. Please try again later.'
       }
     );
   });
@@ -60,7 +60,7 @@ describe('requestGroqAnalysis', () => {
         throw new Error('fetch failed');
       }),
       {
-        message: 'AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+        message: 'Unable to connect to the AI service. Please try again later.'
       }
     );
   });
@@ -69,7 +69,7 @@ describe('requestGroqAnalysis', () => {
     await assert.rejects(
       run(() => new Promise(() => {}), 30),
       {
-        message: 'AI 분석 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.'
+        message: 'AI analysis timed out. Please try again later.'
       }
     );
   });
@@ -82,7 +82,7 @@ describe('requestGroqAnalysis', () => {
         })
       ),
       {
-        message: 'AI 분석 결과가 비어 있거나 올바르지 않습니다.'
+        message: 'AI analysis returned an empty or invalid result.'
       }
     );
   });
@@ -95,7 +95,7 @@ describe('requestGroqAnalysis', () => {
         })
       ),
       {
-        message: 'AI 분석 결과가 비어 있거나 올바르지 않습니다.'
+        message: 'AI analysis returned an empty or invalid result.'
       }
     );
   });
@@ -108,7 +108,7 @@ describe('requestGroqAnalysis', () => {
         text: async () => 'not json'
       })),
       {
-        message: 'AI 서비스 응답 형식이 올바르지 않습니다.'
+        message: 'Invalid AI service response format.'
       }
     );
   });

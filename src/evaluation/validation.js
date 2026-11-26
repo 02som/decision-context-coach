@@ -92,7 +92,7 @@ export function validateEvaluationRequest(payload) {
   const answer = toNonEmptyString(payload.answer);
 
   if (!answer) {
-    throw invalidInput('답변을 입력해 주세요.', 'answer is empty');
+    throw invalidInput('Please enter your answer.', 'answer is empty');
   }
 
   if (answer.length > MAX_ANSWER_LENGTH) {
@@ -132,7 +132,7 @@ export function validateEvaluationRequest(payload) {
 
   if (!question || question !== analysis.question) {
     throw invalidInput(
-      '질문 정보가 분석 결과와 다릅니다. 이슈를 다시 분석한 뒤 시도해 주세요.',
+      'The question does not match the analysis. Analyze the issue again and retry.',
       'question does not match analysis.question'
     );
   }
@@ -174,11 +174,11 @@ export function normalizeIssueContext(issue) {
  * @param {string} text
  * @returns {boolean}
  */
-export function isMostlyKorean(text) {
+export function isMostlyEnglish(text) {
   const hangulCount = (text.match(/[가-힣]/g) || []).length;
   const latinCount = (text.match(/[A-Za-z]/g) || []).length;
 
-  return hangulCount > 0 && hangulCount * 3 >= latinCount;
+  return latinCount > 0 && latinCount > hangulCount * 3;
 }
 
 /**
@@ -251,12 +251,12 @@ export function parseEvaluationOutput(content) {
   }
 
   // 화면과 Jira 댓글에 그대로 나가는 문장이므로 한국어여야 합니다. 영어면 재시도 대상이 됩니다.
-  if (!isMostlyKorean(feedback)) {
-    throw invalidOutput('feedback is not written in Korean');
+  if (!isMostlyEnglish(feedback)) {
+    throw invalidOutput('feedback is not written in English');
   }
 
-  if (!isMostlyKorean(improvement)) {
-    throw invalidOutput('improvement is not written in Korean');
+  if (!isMostlyEnglish(improvement)) {
+    throw invalidOutput('improvement is not written in English');
   }
 
   // unverifiedClaims: 문자열 배열이어야 합니다.

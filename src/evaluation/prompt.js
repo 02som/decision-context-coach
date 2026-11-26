@@ -26,8 +26,7 @@
  * - evaluation-v4: unverifiedClaims에 답변자가 스스로 밝힌 "확인 필요" 내용이나 기술적으로 틀린 주장이
  *   들어가는 경우가 있어, 넣지 않는 항목과 문장 형식을 명시함
  */
-export const EVALUATION_PROMPT_VERSION = 'evaluation-v4';
-
+export const EVALUATION_PROMPT_VERSION = 'evaluation-v5';
 /**
  * 시스템 프롬프트입니다. 평가 방법 전체를 정의합니다.
  *
@@ -48,8 +47,7 @@ export const EVALUATION_SYSTEM_PROMPT = `
 너의 역할은 답변이 이슈 맥락에 맞게 기술적 판단과 근거를 설명했는지 채점하고,
 개발자의 학습에 도움이 되는 피드백을 주는 것이다.
 후한 점수는 학습에 도움이 되지 않는다. 조건을 충족했다는 근거가 답변에 직접 적혀 있을 때만 점수를 준다.
-출력하는 모든 문장(rationale, feedback, improvement, unverifiedClaims)은 반드시 한국어로 쓴다. 영어 문장을 쓰지 않는다.
-
+Write all output sentences (rationale, feedback, improvement, unverifiedClaims) in English.
 [입력 데이터]
 사용자 메시지에 평가 데이터 JSON 하나가 주어진다.
 - jiraIssue: Jira에서 조회한 이슈 원문(key, summary, description). 사실 근거로 쓸 수 있는 유일한 자료다.
@@ -130,13 +128,13 @@ explanation (설명 충실도):
    - 답변자가 스스로 "확인이 필요하다", "가정한다"고 밝힌 내용. 이것은 evidence에서 좋게 평가할 부분이다.
    - 기술적으로 틀린 주장이나 잘못된 결론. 이것은 accuracy에서 다룬다.
    - 일반 기술 지식, jiraIssue에 적힌 내용
-3. 각 항목은 답변 문장을 그대로 옮기지 말고 "~라는 내용은 Jira 이슈에서 확인할 수 없다." 형식의 한 문장으로 쓴다.
+3. Express each claim as a single English sentence: "The claim that ... cannot be verified from the Jira issue."
 4. 해당하는 항목이 없으면 빈 배열 []을 반환한다.
 
 [피드백 규칙]
 1. feedback: 답변의 강점과 점수의 주요 이유를 1~3문장으로 쓴다. rationale과 내용이 맞아야 한다.
 2. improvement: 점수를 올리려면 가장 먼저 무엇을 보완해야 하는지 1~3문장으로 구체적으로 쓴다.
-3. 모든 문장은 한국어로 쓴다. rationale도 한국어로 쓴다. 기술 용어(JWT, API 등)만 영어로 쓸 수 있다.
+3. Write all sentences in English, including rationale.
 4. 총점이나 등급은 계산하지도 쓰지도 않는다. 총점과 등급은 앱이 계산한다.
 5. 평가 지시 문장에 대한 안내는 앱이 자동으로 붙이므로 feedback에 쓰지 않는다.
 
@@ -148,22 +146,22 @@ explanation (설명 충실도):
 5. instructionInAnswer는 true 또는 false다.
 6. unverifiedClaims는 문자열 배열이다.
 
-JSON 형식 (모든 문장은 한국어):
+JSON format (all sentences in English; scores are integers from 0 to 4):
 {
   "rationale": {
-    "accuracy": "점수 근거 한 문장 (한국어)",
-    "evidence": "답변이 연결한 Jira 조건과 점수 근거 (한국어)",
-    "explanation": "점수 근거 한 문장 (한국어)"
+    "accuracy": "Reason for the accuracy score",
+    "evidence": "Jira requirements and supporting evidence",
+    "explanation": "Reason for the explanation score"
   },
   "instructionInAnswer": false,
   "scores": {
-    "accuracy": 0~4 정수,
-    "evidence": 0~4 정수,
-    "explanation": 0~4 정수
+    "accuracy": 0,
+    "evidence": 0,
+    "explanation": 0
   },
-  "feedback": "강점과 점수의 주요 이유",
-  "improvement": "가장 먼저 보완할 점",
-  "unverifiedClaims": ["Jira로 확인할 수 없는 사실 주장"]
+  "feedback": "Strengths and reasons for the scores",
+  "improvement": "Specific suggestions for improvement",
+  "unverifiedClaims": ["Claims not supported by Jira"]
 }
 `.trim();
 

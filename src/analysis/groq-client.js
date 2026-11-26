@@ -25,12 +25,12 @@ export async function requestGroqAnalysis({
   } catch (error) {
     if (error?.message === 'GROQ_TIMEOUT') {
       throw new Error(
-        'AI 분석 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.'
+        'AI analysis timed out. Please try again later.'
       );
     }
 
     throw new Error(
-      'AI 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.'
+      'Unable to connect to the AI service. Please try again later.'
     );
   } finally {
     clearTimeout(timeoutId);
@@ -43,12 +43,12 @@ export async function requestGroqAnalysis({
 
     if (response.status === 429) {
       throw new Error(
-        'AI 서비스 요청이 많습니다. 잠시 후 다시 시도해 주세요.'
+        'Too many AI requests. Please try again later.'
       );
     }
 
     throw new Error(
-      'AI 분석 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.'
+      'AI analysis request failed. Please try again later.'
     );
   }
 
@@ -58,7 +58,7 @@ export async function requestGroqAnalysis({
     result = JSON.parse(rawResponse);
   } catch {
     throw new Error(
-      'AI 서비스 응답 형식이 올바르지 않습니다.'
+      'Invalid AI service response format.'
     );
   }
 
@@ -66,7 +66,7 @@ export async function requestGroqAnalysis({
 
   if (typeof content !== 'string' || !content.trim()) {
     throw new Error(
-      'AI 분석 결과가 비어 있거나 올바르지 않습니다.'
+      'AI analysis returned an empty or invalid result.'
     );
   }
 

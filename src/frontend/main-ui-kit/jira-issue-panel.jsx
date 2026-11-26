@@ -174,19 +174,19 @@ const scoreColors = [
 
 const InfoTile = ({ title, content }) => {
   const icons = {
-    'AI 제안': {
+    'AI Suggestion': {
       glyph: 'lightbulb',
       color: 'color.icon.accent.magenta'
     },
-    '잠재적 위험': {
+    'Potential Risks': {
       glyph: 'warning',
       color: 'color.icon.warning'
     },
-    '기술적 고려 사항': {
+    'Technical Considerations': {
       glyph: 'settings',
       color: 'color.icon.accent.blue'
     },
-    '미확인 정보': {
+    'Missing Information': {
       glyph: 'information',
       color: 'color.icon.subtle'
     }
@@ -213,7 +213,7 @@ const InfoTile = ({ title, content }) => {
           <Text weight="bold">{title}</Text>
         </Inline>
 
-        <Text>{content || '확인 불가'}</Text>
+        <Text>{content || 'Unknown'}</Text>
       </Stack>
     </Box>
   );
@@ -250,15 +250,15 @@ const parseDecision = (decision) => {
   const source = String(decision || '');
 
   const evidence = source.match(
-    /Jira\s*근거\s*:\s*([\s\S]*?)(?=\/?\s*기술 선택 상태\s*:|\/?\s*AI 제안\s*:|$)/
+    /(?:Jira Evidence|Jira\s*근거)\s*:\s*([\s\S]*?)(?=\/?\s*(?:Decision Status|기술 선택 상태|AI Suggestion|AI 제안)\s*:|$)/i
   );
 
   const status = source.match(
-    /기술 선택 상태\s*:\s*([\s\S]*?)(?=\/?\s*AI 제안\s*:|$)/
+    /(?:Decision Status|기술 선택 상태)\s*:\s*([\s\S]*?)(?=\/?\s*(?:AI Suggestion|AI 제안)\s*:|$)/i
   );
 
   const suggestion = source.match(
-    /AI 제안\s*:\s*([\s\S]*)/
+    /(?:AI Suggestion|AI 제안)\s*:\s*([\s\S]*)/i
   );
 
   return {
@@ -273,7 +273,7 @@ const DecisionCard = ({ analysis, issue, description }) => {
   const decision = parseDecision(analysis.decision);
   const isUndecided =
   !decision.status ||
-  /확인\s*불가|미확정|미결정|알 수 없음/.test(
+  /unknown|undecided|unconfirmed|not confirmed|not decided|pending|확인\s*불가|미확정|미결정|알 수 없음/i.test(
     decision.status
   );
   return (
@@ -304,45 +304,45 @@ const DecisionCard = ({ analysis, issue, description }) => {
 
             {isUndecided && (
               <Lozenge appearance="moved">
-                결정 미확정
+                Decision Pending
               </Lozenge>
             )}
           </Inline>
 
           <Heading size="large">
             {isUndecided
-              ? '기술 선택 검토 필요'
+              ? 'Technical Decision Required'
               : decision.status}
           </Heading>
         </Box>
 
         <Box xcss={cardStyle}>
           <Stack space="space.100">
-            <Text weight="bold">Jira 근거 (AI 추출)</Text>
+            <Text weight="bold">Jira Evidence (AI-extracted)</Text>
             <Text>{decision.evidence || '확인 불가'}</Text>
           </Stack>
         </Box>
 
         <Inline space="space.100" grow="fill">
           <InfoTile
-            title="AI 제안"
+            title="AI Suggestion"
             content={decision.suggestion}
           />
 
           <InfoTile
-            title="잠재적 위험"
+            title="Potential Risks"
             content={analysis.risk}
           />
         </Inline>
 
         <Inline space="space.100" grow="fill">
           <InfoTile
-            title="기술적 고려 사항"
+            title="Technical Considerations"
             content={analysis.technicalConsiderations}
           />
 
           <InfoTile
-            title="미확인 정보"
+            title="Missing Information"
             content={analysis.missingInformation}
           />
         </Inline>
@@ -351,7 +351,7 @@ const DecisionCard = ({ analysis, issue, description }) => {
           appearance="subtle"
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? '▲ Jira 원문 접기' : '▼ Jira 원문 보기'}
+          {expanded ? '▲ Hide Jira Context' : '▼ View Jira Context'}
         </Button>
 
         {expanded && (
@@ -457,12 +457,12 @@ const LearningFeedback = ({ feedback }) => {
           <Stack space="space.200">
 
             <Stack space="space.100">
-              <Heading size="small">AI 피드백</Heading>
+              <Heading size="small">AI Feedback</Heading>
               <Text>{feedback.feedback}</Text>
             </Stack>
 
             <Stack space="space.100">
-              <Heading size="small">개선 방향</Heading>
+              <Heading size="small">Suggested Improvements</Heading>
               <Text>{feedback.improvement}</Text>
             </Stack>
 
@@ -472,7 +472,7 @@ const LearningFeedback = ({ feedback }) => {
         <Box xcss={cardStyle}>
           <Stack space="space.100">
             <Text weight="bold">
-              미확인 주장 (Jira)
+              Unverified Claims (Jira)
             </Text>
 
             {feedback.unverifiedClaims.length > 0
@@ -559,7 +559,7 @@ const App = () => {
 
       setAnalysis(result);
     } catch (err) {
-      setError(err.message || 'AI 분석 중 오류가 발생했습니다.');
+      setError(err.message || 'AI analysis failed.');
     } finally {
       setAnalyzing(false);
     }
@@ -579,7 +579,7 @@ const App = () => {
 
     // 빈 답변은 백엔드에서도 거부하지만, 불필요한 호출을 줄이려고 먼저 확인합니다.
     if (!answer.trim()) {
-      setError('답변을 입력해 주세요.');
+      setError('Please enter your answer.');
       return;
     }
 
@@ -609,7 +609,7 @@ const App = () => {
       }
     } catch (err) {
       if (!isStale()) {
-        setError(err.message || 'AI 평가 중 오류가 발생했습니다.');
+        setError(err.message || 'AI evaluation failed.');
       }
     } finally {
       setEvaluating(false);
@@ -782,7 +782,7 @@ const handleSaveToJira = async () => {
 
       <Heading size="small">2. Technical Question</Heading>
 
-        <Text>{analysis.question || 'AI가 기술 질문을 생성하지 못했습니다.'}</Text>
+        <Text>{analysis.question || 'Failed to generate a technical question.'}</Text>
 
         <Heading size="small">3. Your Answer</Heading>
         <TextArea

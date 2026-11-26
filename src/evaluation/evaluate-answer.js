@@ -45,7 +45,7 @@ export const silentLogger = Object.freeze({ warn() {}, error() {} });
  * docs/evaluation-rubric.md 6절: 지시 문장은 점수에 반영하지 않고, 그 사실을 피드백에 밝힙니다.
  * 모델이 직접 쓰게 하면 빠지거나 표현이 달라질 수 있어서, 모델은 instructionInAnswer만 표시하고 문장은 앱이 붙입니다.
  */
-export const INSTRUCTION_NOTICE = '답변에 포함된 평가 지시 문장은 채점에 반영하지 않았습니다.';
+export const INSTRUCTION_NOTICE = 'Instructions embedded in the answer were ignored during evaluation.';
 
 /**
  * 검증된 요청과 Jira 이슈로 Groq 평가를 실행하고 최종 결과를 돌려줍니다.
@@ -160,7 +160,7 @@ export async function runEvaluateAnswer({
   if (!activeIssueKey || activeIssueKey !== request.issueKey) {
     throw new EvaluationError(
       ERROR_CODES.INVALID_INPUT,
-      '현재 열려 있는 이슈와 평가 요청의 이슈가 다릅니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.',
+      'The evaluation request does not match the active issue. Refresh the page and try again.',
       { reason: 'issueKey does not match the active issue' }
     );
   }

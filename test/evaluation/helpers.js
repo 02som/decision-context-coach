@@ -60,8 +60,8 @@ export function buildModelOutput(overrides = {}) {
     },
     instructionInAnswer: false,
     scores: { accuracy: 3, evidence: 2, explanation: 1 },
-    feedback: '서버 측 검증 방법을 제시했다.',
-    improvement: '선택 이유와 실패 처리, 테스트 방법을 설명하라.',
+    feedback: 'The answer proposes server-side validation.',
+    improvement: 'Explain the rationale, failure handling, and testing approach.',
     unverifiedClaims: [],
     ...overrides
   };

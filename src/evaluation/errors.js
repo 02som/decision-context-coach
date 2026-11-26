@@ -31,23 +31,25 @@ export const ERROR_CODES = Object.freeze({
  * INVALID_INPUT은 상황마다 안내가 달라서, throw하는 곳에서 문구를 직접 넘기는 경우가 많습니다.
  */
 const DEFAULT_MESSAGES = Object.freeze({
-  [ERROR_CODES.INVALID_INPUT]: '평가 요청 정보가 올바르지 않습니다. 이슈를 다시 분석한 뒤 시도해 주세요.',
-  [ERROR_CODES.JIRA_FETCH_FAILED]: 'Jira 이슈 정보를 불러오지 못했습니다. 이슈 접근 권한을 확인한 뒤 다시 시도해 주세요.',
-  [ERROR_CODES.CONFIGURATION_ERROR]: 'AI 평가 설정이 완료되지 않았습니다. 앱 관리자에게 문의해 주세요.',
-  [ERROR_CODES.LLM_REQUEST_FAILED]: 'AI 평가 요청에 실패했습니다. 잠시 후 다시 시도해 주세요.',
-  [ERROR_CODES.LLM_TIMEOUT]: 'AI 평가 응답 시간이 초과되었습니다. 다시 시도해 주세요.',
-  [ERROR_CODES.EMPTY_MODEL_OUTPUT]: 'AI 평가 결과가 비어 있습니다. 다시 시도해 주세요.',
-  [ERROR_CODES.INVALID_MODEL_OUTPUT]: 'AI 평가 결과 형식이 올바르지 않습니다. 다시 시도해 주세요.'
+  [ERROR_CODES.INVALID_INPUT]: 'Invalid evaluation request. Analyze the issue again and retry.',
+  [ERROR_CODES.JIRA_FETCH_FAILED]: 'Unable to load the Jira issue. Check your access permissions and try again.',
+  [ERROR_CODES.CONFIGURATION_ERROR]: 'AI evaluation is not configured. Contact your app administrator.',
+  [ERROR_CODES.LLM_REQUEST_FAILED]: 'AI evaluation request failed. Please try again later.',
+  [ERROR_CODES.LLM_TIMEOUT]: 'AI evaluation timed out. Please try again.',
+  [ERROR_CODES.EMPTY_MODEL_OUTPUT]: 'AI evaluation returned an empty result. Please try again.',
+  [ERROR_CODES.INVALID_MODEL_OUTPUT]: 'Invalid AI evaluation response format. Please try again.'
 });
 
 /** EvaluationError가 아닌 예상하지 못한 오류(버그 등)에 보여 줄 문구입니다. */
-export const UNEXPECTED_ERROR_MESSAGE = 'AI 평가 중 알 수 없는 오류가 발생했습니다. 다시 시도해 주세요.';
+
+export const UNEXPECTED_ERROR_MESSAGE = 'An unexpected error occurred during AI evaluation. Please try again.';
+
 
 /**
  * 답변 평가 과정에서 "예상된" 실패를 나타내는 에러입니다.
  *
  * @example
- *   throw new EvaluationError(ERROR_CODES.INVALID_INPUT, '답변을 입력해 주세요.');
+ *   throw new EvaluationError(ERROR_CODES.INVALID_INPUT, 'Please enter your answer.');
  *   throw new EvaluationError(ERROR_CODES.LLM_REQUEST_FAILED, undefined, { status: 500 });
  */
 export class EvaluationError extends Error {

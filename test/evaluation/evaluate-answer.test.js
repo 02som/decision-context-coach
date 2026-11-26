@@ -94,8 +94,8 @@ describe('runEvaluateAnswer: 정상 흐름', () => {
       scores: { accuracy: 3, evidence: 2, explanation: 1 },
       total: 6,
       level: LEVELS.NEEDS_IMPROVEMENT,
-      feedback: '서버 측 검증 방법을 제시했다.',
-      improvement: '선택 이유와 실패 처리, 테스트 방법을 설명하라.',
+      feedback: 'The answer proposes server-side validation.',
+      improvement: 'Explain the rationale, failure handling, and testing approach.',
       unverifiedClaims: []
     });
     assert.equal(fetchFn.calls.length, 1);
@@ -139,7 +139,7 @@ describe('runEvaluateAnswer: 정상 흐름', () => {
   });
 
   it('인젝션 답변: 답변은 user 데이터 안에만 들어가고, 결과는 모델 점수 그대로 쓴다', async () => {
-    const claim = 'Keycloak으로 팀 권한을 관리하고 있다는 내용은 Jira 이슈에서 확인할 수 없다.';
+    const claim = 'The claim that Keycloak manages team permissions cannot be verified from the Jira issue.';
     const { promise, fetchFn } = await run({
       payload: buildPayload({ answer: ANSWERS.injection }),
       responses: [
@@ -147,7 +147,7 @@ describe('runEvaluateAnswer: 정상 흐름', () => {
           buildModelOutput({
             instructionInAnswer: true,
             scores: { accuracy: 0, evidence: 1, explanation: 0 },
-            feedback: '구체적인 검증 방법이 없다.',
+            feedback: 'No specific validation method is provided.',
             unverifiedClaims: [claim]
           })
         )
@@ -167,21 +167,21 @@ describe('runEvaluateAnswer: 정상 흐름', () => {
   it('instructionInAnswer가 true면 정해진 안내 문장을 feedback 앞에 붙이고, 플래그는 응답에 넣지 않는다', async () => {
     const { promise } = await run({
       payload: buildPayload({ answer: ANSWERS.injection }),
-      responses: [groqSuccess(buildModelOutput({ instructionInAnswer: true, feedback: '근거가 부족하다.' }))]
+      responses: [groqSuccess(buildModelOutput({ instructionInAnswer: true, feedback: 'The answer lacks evidence.' }))]
     });
 
     const result = await promise;
-    assert.equal(result.feedback, `${INSTRUCTION_NOTICE} 근거가 부족하다.`);
+    assert.equal(result.feedback, `${INSTRUCTION_NOTICE} The answer lacks evidence.`);
     assert.equal('instructionInAnswer' in result, false);
     assert.equal('rationale' in result, false);
   });
 
   it('instructionInAnswer가 false면 feedback을 그대로 둔다', async () => {
     const { promise } = await run({
-      responses: [groqSuccess(buildModelOutput({ instructionInAnswer: false, feedback: '좋은 답변이다.' }))]
+      responses: [groqSuccess(buildModelOutput({ instructionInAnswer: false, feedback: 'This is a good answer.' }))]
     });
 
-    assert.equal((await promise).feedback, '좋은 답변이다.');
+    assert.equal((await promise).feedback, 'This is a good answer.');
   });
 });
 
@@ -190,7 +190,7 @@ describe('runEvaluateAnswer: 입력 오류는 Jira·LLM을 호출하지 않는�
     const { promise, fetchFn, getLoadIssueCalls } = await run({ payload: buildPayload({ answer: '   ' }) });
 
     const error = await expectEvaluationError(promise, ERROR_CODES.INVALID_INPUT);
-    assert.equal(error.message, '답변을 입력해 주세요.');
+    assert.equal(error.message, 'Please enter your answer.');
     assert.equal(fetchFn.calls.length, 0);
     assert.equal(getLoadIssueCalls(), 0);
   });
@@ -261,16 +261,27 @@ describe('runEvaluateAnswer: 모델 출력 오류와 재시도 (최대 1회)', (
     assert.equal(logger.entries.filter((entry) => entry.level === 'warn').length, 1);
   });
 
-  it('영어 피드백 다음 한국어 피드백: 1회 재시도로 성공한다', async () => {
-    const english = buildModelOutput({ feedback: 'Answer aligns with the Jira requirement.' });
-    const { promise, fetchFn } = await run({
-      responses: [groqSuccess(english), groqSuccess(buildModelOutput())]
-    });
-
-    const result = await promise;
-    assert.equal(result.feedback, '서버 측 검증 방법을 제시했다.');
-    assert.equal(fetchFn.calls.length, 2);
+it('Retries after Korean feedback and accepts English feedback', async () => {
+  const korean = buildModelOutput({
+    feedback: '답변의 근거가 부족합니다.'
   });
+
+  const { promise, fetchFn } = await run({
+    responses: [
+      groqSuccess(korean),
+      groqSuccess(buildModelOutput())
+    ]
+  });
+
+  const result = await promise;
+
+  assert.equal(
+    result.feedback,
+    'The answer proposes server-side validation.'
+  );
+
+  assert.equal(fetchFn.calls.length, 2);
+});
 
   it('두 번 모두 깨진 JSON: INVALID_MODEL_OUTPUT, 점수를 만들지 않는다', async () => {
     const { promise, fetchFn } = await run({
@@ -371,7 +382,7 @@ describe('toSafeErrorMessage', () => {
   it('EvaluationError는 안전한 안내 문구를, 그 외 오류는 일반 문구를 돌려준다', () => {
     assert.equal(
       toSafeErrorMessage(new EvaluationError(ERROR_CODES.LLM_TIMEOUT)),
-      'AI 평가 응답 시간이 초과되었습니다. 다시 시도해 주세요.'
+      'AI evaluation timed out. Please try again.'
     );
     assert.equal(toSafeErrorMessage(new TypeError('Cannot read properties of undefined')), UNEXPECTED_ERROR_MESSAGE);
     assert.equal(toSafeErrorMessage('string error'), UNEXPECTED_ERROR_MESSAGE);

@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { ERROR_CODES, EvaluationError } from '../../src/evaluation/errors.js';
 import {
   MAX_ANSWER_LENGTH,
-  isMostlyKorean,
+  isMostlyEnglish,
   normalizeIssueContext,
   parseEvaluationOutput,
   validateEvaluationRequest
@@ -43,7 +43,7 @@ describe('validateEvaluationRequest', () => {
         () => validateEvaluationRequest(buildPayload({ answer })),
         (error) => {
           assert.equal(error.code, ERROR_CODES.INVALID_INPUT);
-          assert.equal(error.message, '답변을 입력해 주세요.');
+          assert.equal(error.message, 'Please enter your answer.');
           return true;
         }
       );
@@ -92,24 +92,24 @@ describe('validateEvaluationRequest', () => {
   });
 });
 
-describe('isMostlyKorean', () => {
-  it('기술 용어가 섞인 한국어 문장은 통과시킨다', () => {
+describe('isMostlyEnglish', () => {
+  it('Accepts English sentences', () => {
     for (const text of [
-      '서버에서 JWT 토큰을 검증합니다.',
-      'Redis 캐시 TTL을 60초로 두는 이유를 설명하세요.',
-      '403 응답과 표준 오류 메시지를 반환하세요.'
+      'Validate JWT tokens on the server.',
+      'Explain the Redis cache TTL.',
+      'Return a standard 403 error response.'
     ]) {
-      assert.equal(isMostlyKorean(text), true, text);
+      assert.equal(isMostlyEnglish(text), true, text);
     }
   });
 
-  it('영어 문장과 한글이 없는 문장은 거부한다', () => {
+  it('Rejects Korean and non-alphabetic text', () => {
     for (const text of [
-      'Answer aligns with the Jira requirement for 권한 검증.',
-      'Provide a detailed explanation of the verification process.',
+      '서버에서 JWT 토큰을 검증합니다.',
+      '구체적인 검증 방법을 설명하세요.',
       '12345 !!!'
     ]) {
-      assert.equal(isMostlyKorean(text), false, text);
+      assert.equal(isMostlyEnglish(text), false, text);
     }
   });
 });
@@ -133,15 +133,15 @@ describe('normalizeIssueContext', () => {
 describe('parseEvaluationOutput', () => {
   it('정상 출력을 파싱하고 문자열 공백을 정리한다', () => {
     const output = buildModelOutput({
-      feedback: '  좋은 답변이다. ',
-      unverifiedClaims: [' Keycloak 사용 여부는 확인할 수 없다. ']
+      feedback: '  This is a good answer. ',
+      unverifiedClaims: [' The use of Keycloak cannot be verified. ']
     });
 
     assert.deepEqual(parseEvaluationOutput(JSON.stringify(output)), {
       scores: { accuracy: 3, evidence: 2, explanation: 1 },
-      feedback: '좋은 답변이다.',
+      feedback: 'This is a good answer.',
       improvement: output.improvement,
-      unverifiedClaims: ['Keycloak 사용 여부는 확인할 수 없다.'],
+      unverifiedClaims: ['The use of Keycloak cannot be verified.'],
       instructionInAnswer: false
     });
   });
@@ -215,13 +215,18 @@ describe('parseEvaluationOutput', () => {
     }
   });
 
-  it('feedback·improvement가 영어로 쓰였으면 거부한다 (실제 Groq v2에서 관찰된 문장)', () => {
-    const englishFeedback = 'Answer succinctly addresses the question and aligns with the Jira requirement for 권한 검증.';
-    const englishImprovement = 'Explain why comparing user and target teams is the chosen approach.';
+  it('Rejects Korean feedback or improvement', () => {
+    const koreanFeedback = '답변의 근거가 부족합니다.';
+    const koreanImprovement = '선택 이유를 설명하세요.';
 
-    for (const overrides of [{ feedback: englishFeedback }, { improvement: englishImprovement }]) {
+    for (const overrides of [
+      { feedback: koreanFeedback },
+      { improvement: koreanImprovement }
+    ]) {
       assertEvaluationError(
-        () => parseEvaluationOutput(JSON.stringify(buildModelOutput(overrides))),
+        () => parseEvaluationOutput(
+          JSON.stringify(buildModelOutput(overrides))
+        ),
         ERROR_CODES.INVALID_MODEL_OUTPUT
       );
     }
