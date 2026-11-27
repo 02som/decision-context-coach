@@ -45,6 +45,13 @@ export const DESCRIPTION_MAX_CHARS = 3000;
 const BOUNDARY_MIN_RATIO = 0.8;
 
 /**
+ * 잘림 안내 문장의 시작 부분 (R6).
+ * 평가 모듈이 설명 끝의 이 문구로 "설명이 잘렸는지" 판단하므로,
+ * 문구를 직접 적지 말고 이 값을 import해서 쓴다. 안내 문장을 바꿀 때도 이 값으로 시작하게 유지한다.
+ */
+export const TRUNCATION_NOTICE_PREFIX = '(Truncated:';
+
+/**
  * 인라인 노드(문단 안의 조각) 하나를 글자로 바꿉니다.
  *
  * @param {any} node ADF 인라인 노드
@@ -318,7 +325,7 @@ function truncateDescription(text, maxChars) {
   // 코드 블록 중간에서 잘렸으면 닫아 줍니다
   if (countCodeFences(kept) % 2 === 1) kept += `\n${CODE_FENCE}`;
 
-  return `${kept}\n\n(Truncated: the description was too long, so only the first ${keptLength} of ${text.length} characters are included.)`;
+  return `${kept}\n\n${TRUNCATION_NOTICE_PREFIX} the description was too long, so only the first ${keptLength} of ${text.length} characters are included.)`;
 }
 
 /**
