@@ -10,7 +10,7 @@
  * - R2: 문단과 문단 사이는 빈 줄 하나
  * - R3: 글머리 목록은 "- ", 번호 목록은 "1. ", 하위 목록은 공백 2칸 들여쓰기
  * - R4: 제목은 텍스트만 / 코드 블록은 ``` 로 감쌈 / 표는 한 행 한 줄, 칸 사이 " | "
- *       / 링크 카드는 주소 / 이미지·첨부는 "[첨부 파일]"
+ *       / 링크 카드는 주소 / 이미지·첨부는 "[attachment]"
  * - R5: 앞뒤 공백 제거, 연속 빈 줄은 하나로 (코드 블록 안은 건드리지 않음)
  * - R6: 설명이 DESCRIPTION_MAX_CHARS를 넘으면 앞부분부터 남기고 자른 뒤,
  *       잘렸다는 사실과 원문 길이를 끝에 적는다 (AI가 뒷부분을 '확인 불가'로 볼 수 있게)
@@ -29,7 +29,7 @@ const MEDIA_TYPES = new Set(['mediaSingle', 'mediaGroup', 'media', 'mediaInline'
 const CODE_FENCE = '```';
 
 /** 첨부 파일 자리 표시 (R4) */
-const ATTACHMENT_PLACEHOLDER = '[첨부 파일]';
+const ATTACHMENT_PLACEHOLDER = '[attachment]';
 
 /**
  * 설명 최대 글자 수 (R6).
@@ -318,7 +318,7 @@ function truncateDescription(text, maxChars) {
   // 코드 블록 중간에서 잘렸으면 닫아 줍니다
   if (countCodeFences(kept) % 2 === 1) kept += `\n${CODE_FENCE}`;
 
-  return `${kept}\n\n(이하 생략: 설명이 길어 원문 ${text.length}자 중 앞 ${keptLength}자만 포함했습니다.)`;
+  return `${kept}\n\n(Truncated: the description was too long, so only the first ${keptLength} of ${text.length} characters are included.)`;
 }
 
 /**
@@ -359,7 +359,7 @@ export function toJiraContext(issue) {
   const summary = typeof issue?.fields?.summary === 'string' ? issue.fields.summary.trim() : '';
 
   if (!key || !summary) {
-    throw new Error('Jira 이슈의 번호나 제목을 확인할 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.');
+    throw new Error('Could not find the Jira issue key or title. Please refresh the page and try again.');
   }
 
   return {

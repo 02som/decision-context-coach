@@ -80,14 +80,14 @@ describe('adfToPlainText', () => {
     assert.equal(adfToPlainText(doc(table)), '비밀번호 보관 | 필요 없음');
   });
 
-  it('링크는 글자, 링크 카드는 주소, 첨부는 [첨부 파일] (R4)', () => {
+  it('링크는 글자, 링크 카드는 주소, 첨부는 [attachment] (R4)', () => {
     const adf = doc(
       p(t('문서', [{ type: 'link', attrs: { href: 'https://example.com' } }]), t(' 참고')),
       p({ type: 'inlineCard', attrs: { url: 'https://example.com/a' } }),
       { type: 'mediaSingle', content: [{ type: 'media', attrs: { id: 'x' } }] }
     );
 
-    assert.equal(adfToPlainText(adf), '문서 참고\n\nhttps://example.com/a\n\n[첨부 파일]');
+    assert.equal(adfToPlainText(adf), '문서 참고\n\nhttps://example.com/a\n\n[attachment]');
   });
 
   it('멘션 이름은 내보내지 않는다', () => {
@@ -113,7 +113,7 @@ describe('adfToPlainText', () => {
 });
 
 describe('adfToPlainText 긴 설명 처리 (R6)', () => {
-  const NOTICE = /\n\n\(이하 생략: 설명이 길어 원문 \d+자 중 앞 \d+자만 포함했습니다\.\)$/;
+  const NOTICE = /\n\n\(Truncated: the description was too long, so only the first \d+ of \d+ characters are included\.\)$/;
 
   it('최대 길이 이하면 자르지 않고 안내도 붙이지 않는다', () => {
     const text = '가'.repeat(50);
@@ -126,7 +126,7 @@ describe('adfToPlainText 긴 설명 처리 (R6)', () => {
 
     assert.ok(result.startsWith('가'.repeat(50)));
     assert.match(result, NOTICE);
-    assert.ok(result.includes('원문 80자 중 앞 50자'));
+    assert.ok(result.includes('first 50 of 80 characters'));
   });
 
   it('문장 중간이 아니라 문장 끝에서 자른다 (기준 1)', () => {
@@ -134,14 +134,14 @@ describe('adfToPlainText 긴 설명 처리 (R6)', () => {
     const text = `${first} 세션 로그인은 대안으로만 남긴다.`;
     const result = adfToPlainText(text, { maxChars: 60 });
 
-    assert.ok(result.startsWith(`${first}\n\n(이하 생략`));
+    assert.ok(result.startsWith(`${first}\n\n(Truncated`));
   });
 
   it('최대 길이 80% 뒤에 문장 끝이 없으면 최대 길이에서 그대로 자른다', () => {
     const text = `짧다. ${'가'.repeat(100)}`;
     const result = adfToPlainText(text, { maxChars: 50 });
 
-    assert.ok(result.includes('앞 50자'));
+    assert.ok(result.includes('first 50 of'));
   });
 
   it('코드 블록 안에서 잘리면 코드 블록을 닫아 준다', () => {
@@ -158,7 +158,7 @@ describe('adfToPlainText 긴 설명 처리 (R6)', () => {
     const result = adfToPlainText(long);
 
     assert.match(result, NOTICE);
-    assert.ok(result.includes(`앞 ${DESCRIPTION_MAX_CHARS}자`));
+    assert.ok(result.includes(`first ${DESCRIPTION_MAX_CHARS} of`));
   });
 });
 
