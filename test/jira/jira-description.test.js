@@ -10,7 +10,8 @@ import assert from 'node:assert/strict';
 import {
   adfToPlainText,
   toJiraContext,
-  DESCRIPTION_MAX_CHARS
+  DESCRIPTION_MAX_CHARS,
+  TRUNCATION_NOTICE_PREFIX
 } from '../../src/resolvers/jira-description.js';
 
 /** 짧게 ADF를 만드는 도우미 */
@@ -151,6 +152,14 @@ describe('adfToPlainText 긴 설명 처리 (R6)', () => {
 
     assert.equal(fences % 2, 0);
     assert.match(result, NOTICE);
+  });
+
+  it('잘림 안내는 TRUNCATION_NOTICE_PREFIX로 시작한다 (평가 모듈이 이 값으로 잘림을 판단)', () => {
+    const result = adfToPlainText('가'.repeat(80), { maxChars: 50 });
+    const notice = result.slice(result.lastIndexOf('\n\n') + 2);
+
+    assert.ok(notice.startsWith(TRUNCATION_NOTICE_PREFIX));
+    assert.ok(!adfToPlainText('가'.repeat(50), { maxChars: 50 }).includes(TRUNCATION_NOTICE_PREFIX));
   });
 
   it('기본 최대 길이는 DESCRIPTION_MAX_CHARS이고 ADF 설명에도 적용된다', () => {
