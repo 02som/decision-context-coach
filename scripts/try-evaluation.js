@@ -13,7 +13,7 @@
  * 실행:
  *   npm run try:evaluation                      # 모든 예시 1회
  *   npm run try:evaluation -- --runs=3          # 모든 예시 3회 반복 (결과가 안정적인지 확인)
- *   npm run try:evaluation -- strong injection  # 특정 예시만 (sample, strong, injection, wrong, blank)
+ *   npm run try:evaluation -- strong injection  # 특정 예시만 (아래 CASES의 name)
  *
  * 요청 한도(rate limit):
  *   Groq 무료 키는 분당 사용량 한도가 있어 연속 호출하면 429가 납니다.
@@ -25,19 +25,35 @@
 
 import { runEvaluateAnswer } from '../src/evaluation/evaluate-answer.js';
 import { EVALUATION_PROMPT_VERSION } from '../src/evaluation/prompt.js';
-import { ANSWERS, ISSUE, buildPayload } from '../test/evaluation/helpers.js';
+import { ANALYSIS, ANSWERS, ISSUE } from '../test/evaluation/helpers.js';
+import {
+  CACHE_ANALYSIS,
+  CACHE_ISSUE,
+  LOGIN_ANALYSIS,
+  LOGIN_ISSUE,
+  TEST_ISSUE_ANSWERS
+} from '../test/evaluation/test-issues.js';
+
+/** 예시 하나가 평가할 이슈와 분석 결과입니다. */
+const FLOW_1 = { issue: ISSUE, analysis: ANALYSIS };
+const DFAS_156 = { issue: LOGIN_ISSUE, analysis: LOGIN_ANALYSIS };
+const DFAS_157 = { issue: CACHE_ISSUE, analysis: CACHE_ANALYSIS };
 
 /**
  * 실행할 예시 목록입니다.
- * expected는 docs/evaluation-rubric.md 8절의 기대 점수입니다 (LLM 판단이라 ±1점 차이는 있을 수 있음).
+ * expected는 docs/evaluation-rubric.md 8절의 기대 결과입니다 (LLM 판단이라 ±1점 차이는 있을 수 있음).
  * callsGroq가 false인 예시는 Groq를 호출하지 않으므로 대기 시간을 두지 않습니다.
  */
 const CASES = [
-  { name: 'sample', label: '예시 A: 계약서 샘플 답변', answer: ANSWERS.sample, expected: '3/2/1 (6점, Needs improvement)', callsGroq: true },
-  { name: 'strong', label: '예시 B: 강한 답변', answer: ANSWERS.strong, expected: '4/4/4 (12점, Strong)', callsGroq: true },
-  { name: 'injection', label: '예시 C: 근거 없는 단정 + 인젝션', answer: ANSWERS.injection, expected: '0/1/0 (1점, Insufficient), 안내 문장 + Keycloak 확인 불가', callsGroq: true },
-  { name: 'wrong', label: '오답: 서버 검증이 필요 없다는 답변', answer: ANSWERS.wrong, expected: '낮은 점수 (Insufficient)', callsGroq: true },
-  { name: 'blank', label: '빈 답변', answer: '   ', expected: 'INVALID_INPUT, Groq 호출 없음', callsGroq: false }
+  { name: 'sample', label: '예시 A: 계약서 샘플 답변', ...FLOW_1, answer: ANSWERS.sample, expected: '3/2/1 (6점, Needs improvement)', callsGroq: true },
+  { name: 'strong', label: '예시 B: 강한 답변', ...FLOW_1, answer: ANSWERS.strong, expected: '4/4/4 (12점, Strong)', callsGroq: true },
+  { name: 'injection', label: '예시 C: 근거 없는 단정 + 인젝션', ...FLOW_1, answer: ANSWERS.injection, expected: '0/1/0 (1점, Insufficient), 안내 문장 + Keycloak 확인 불가', callsGroq: true },
+  { name: 'wrong', label: '오답: 서버 검증이 필요 없다는 답변', ...FLOW_1, answer: ANSWERS.wrong, expected: '낮은 점수 (Insufficient)', callsGroq: true },
+  { name: 'blank', label: '빈 답변', ...FLOW_1, answer: '   ', expected: 'INVALID_INPUT, Groq 호출 없음', callsGroq: false },
+  { name: 'idk', label: '예시 D: 답하려는 시도가 없는 답변 (DFAS-156)', ...DFAS_156, answer: TEST_ISSUE_ANSWERS.idk, expected: '0/0/0 (0점, Insufficient), 확인 불가 없음', callsGroq: true },
+  { name: 'unsure', label: '예시 E: 불확실하다고 밝힌 답변 (DFAS-156)', ...DFAS_156, answer: TEST_ISSUE_ANSWERS.unsure, expected: '0점이 아님 (평소대로 채점)', callsGroq: true },
+  { name: 'truncated', label: '예시 F: 잘린 뒷부분의 결정을 말한 답변 (DFAS-157)', ...DFAS_157, answer: TEST_ISSUE_ANSWERS.truncated, expected: 'evidence 감점 없음, 결정은 "...because the Jira description was truncated."로 표시', callsGroq: true },
+  { name: 'truncatedShort', label: '예시 G: 보고서 원래 답변 (DFAS-157)', ...DFAS_157, answer: TEST_ISSUE_ANSWERS.truncatedShort, expected: '낮은 점수 (이유 없음), "cannot be verified from the Jira issue" 표시 없음', callsGroq: true }
 ];
 
 /** 호출 사이 대기 시간(밀리초)입니다. */
@@ -54,11 +70,18 @@ async function runOnce(testCase, apiKey) {
   const startedAt = Date.now();
 
   try {
+    const { issue, analysis } = testCase;
+
     const result = await runEvaluateAnswer({
-      payload: buildPayload({ answer: testCase.answer }),
-      activeIssueKey: ISSUE.key,
-      // 실제 Forge에서는 resolver가 Jira를 다시 조회합니다. 여기서는 FLOW-1 예시 이슈를 그대로 돌려줍니다.
-      loadIssue: async () => ({ ...ISSUE }),
+      payload: {
+        issueKey: issue.key,
+        analysis: { ...analysis },
+        question: analysis.question,
+        answer: testCase.answer
+      },
+      activeIssueKey: issue.key,
+      // 실제 Forge에서는 resolver가 Jira를 다시 조회합니다. 여기서는 예시 이슈를 그대로 돌려줍니다.
+      loadIssue: async () => ({ ...issue }),
       apiKey,
       fetchFn: (url, options) => fetch(url, options)
     });
@@ -123,7 +146,8 @@ async function main() {
     return;
   }
 
-  console.log(`프롬프트: ${EVALUATION_PROMPT_VERSION} / 이슈: ${ISSUE.key} ${ISSUE.summary}`);
+  const issueKeys = [...new Set(cases.map((item) => item.issue.key))].join(', ');
+  console.log(`프롬프트: ${EVALUATION_PROMPT_VERSION} / 이슈: ${issueKeys}`);
   console.log(`반복: ${runs}회 / 호출 간격: ${DELAY_MS / 1000}초\n`);
 
   // summary[예시 이름] = 회차별 결과 문자열 배열
