@@ -15,7 +15,11 @@ import {
   UNEXPECTED_ERROR_MESSAGE,
   toSafeErrorMessage
 } from '../../src/evaluation/errors.js';
-import { INSTRUCTION_NOTICE, runEvaluateAnswer } from '../../src/evaluation/evaluate-answer.js';
+import {
+  INSTRUCTION_NOTICE,
+  TRUNCATION_NOTICE,
+  runEvaluateAnswer
+} from '../../src/evaluation/evaluate-answer.js';
 import {
   EVALUATION_MODEL,
   GROQ_CHAT_COMPLETIONS_URL
@@ -30,6 +34,12 @@ import {
   createRecordingLogger,
   groqSuccess
 } from './helpers.js';
+import {
+  CACHE_ANALYSIS,
+  CACHE_ISSUE,
+  TEST_ISSUE_ANSWERS,
+  buildTestIssuePayload
+} from './test-issues.js';
 
 const API_KEY = 'test-groq-key-not-real';
 
@@ -113,6 +123,43 @@ describe('runEvaluateAnswer: 정상 흐름', () => {
     assert.equal(call.body.model, EVALUATION_MODEL);
     assert.deepEqual(call.body.response_format, { type: 'json_object' });
     assert.deepEqual(call.body.messages.map((message) => message.role), ['system', 'user']);
+  });
+
+  it('잘린 설명 이슈(DFAS-157): Groq에 descriptionTruncated: true를 보내고, feedback 앞에 잘림 안내를 붙인다', async () => {
+    const { promise, fetchFn } = await run({
+      payload: buildTestIssuePayload(CACHE_ISSUE, CACHE_ANALYSIS, TEST_ISSUE_ANSWERS.truncated),
+      activeIssueKey: CACHE_ISSUE.key,
+      loadIssue: async () => ({ ...CACHE_ISSUE })
+    });
+    const result = await promise;
+
+    const userContent = fetchFn.calls[0].body.messages[1].content;
+    assert.ok(userContent.includes('"descriptionTruncated": true'));
+    assert.equal(result.feedback, `${TRUNCATION_NOTICE} The answer proposes server-side validation.`);
+  });
+
+  it('잘리지 않은 이슈: descriptionTruncated: false, 잘림 안내 없음', async () => {
+    const { promise, fetchFn } = await run();
+    const result = await promise;
+
+    const userContent = fetchFn.calls[0].body.messages[1].content;
+    assert.ok(userContent.includes('"descriptionTruncated": false'));
+    assert.equal(result.feedback.includes(TRUNCATION_NOTICE), false);
+  });
+
+  it('평가 지시 문장도 있고 설명도 잘렸으면: 지시 문장 안내 → 잘림 안내 → 모델 feedback 순서', async () => {
+    const { promise } = await run({
+      payload: buildTestIssuePayload(CACHE_ISSUE, CACHE_ANALYSIS, TEST_ISSUE_ANSWERS.truncated),
+      activeIssueKey: CACHE_ISSUE.key,
+      loadIssue: async () => ({ ...CACHE_ISSUE }),
+      responses: [groqSuccess(buildModelOutput({ instructionInAnswer: true }))]
+    });
+    const result = await promise;
+
+    assert.equal(
+      result.feedback,
+      `${INSTRUCTION_NOTICE} ${TRUNCATION_NOTICE} The answer proposes server-side validation.`
+    );
   });
 
   it('강한 답변: 12점이면 Strong', async () => {

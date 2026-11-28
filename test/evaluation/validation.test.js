@@ -55,6 +55,19 @@ describe('validateEvaluationRequest', () => {
     assertEvaluationError(() => validateEvaluationRequest(buildPayload({ answer })), ERROR_CODES.INVALID_INPUT);
   });
 
+  it('너무 긴 답변의 안내 문구는 영어이고 최대 길이를 알려 준다 (앱 영어화)', () => {
+    const answer = 'a'.repeat(MAX_ANSWER_LENGTH + 1);
+
+    assert.throws(
+      () => validateEvaluationRequest(buildPayload({ answer })),
+      (error) => {
+        assert.equal(/[가-힣]/.test(error.message), false, error.message);
+        assert.ok(error.message.includes(String(MAX_ANSWER_LENGTH)));
+        return true;
+      }
+    );
+  });
+
   it('최대 길이와 같은 답변은 허용한다', () => {
     const answer = 'a'.repeat(MAX_ANSWER_LENGTH);
     assert.equal(validateEvaluationRequest(buildPayload({ answer })).answer.length, MAX_ANSWER_LENGTH);

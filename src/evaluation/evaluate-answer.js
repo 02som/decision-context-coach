@@ -16,7 +16,7 @@
 
 import { ERROR_CODES, EvaluationError } from './errors.js';
 import { requestEvaluationCompletion, DEFAULT_TIMEOUT_MS } from './groq-client.js';
-import { buildEvaluationMessages } from './prompt.js';
+import { buildEvaluationMessages, isDescriptionTruncated } from './prompt.js';
 import { computeTotal, getLevel } from './scoring.js';
 import {
   normalizeIssueContext,
@@ -46,6 +46,36 @@ export const silentLogger = Object.freeze({ warn() {}, error() {} });
  * 모델이 직접 쓰게 하면 빠지거나 표현이 달라질 수 있어서, 모델은 instructionInAnswer만 표시하고 문장은 앱이 붙입니다.
  */
 export const INSTRUCTION_NOTICE = 'Instructions embedded in the answer were ignored during evaluation.';
+
+/**
+ * Jira 설명이 길어서 잘렸을 때(jira-description.js의 R6) feedback 맨 앞에 붙이는 안내 문장입니다.
+ * docs/evaluation-rubric.md 6절: 잘린 뒷부분에 있을 수 있는 내용은 감점하지 않고, 확인하지 못했다는 사실을 밝힙니다.
+ * 사용자는 설명이 잘린 줄 모르므로(DFAS-154 문제 ④) 모델 판단에 맡기지 않고 앱이 항상 붙입니다.
+ */
+export const TRUNCATION_NOTICE =
+  'The Jira description was too long and was shortened for evaluation, so details from the omitted part could not be checked.';
+
+/**
+ * 모델이 쓴 feedback 앞에 앱이 정한 안내 문장을 붙입니다.
+ * 순서: 평가 지시 문장 안내 → 설명 잘림 안내 → 모델 feedback
+ *
+ * @param {string} feedback 모델이 쓴 feedback
+ * @param {{ instructionInAnswer: boolean, descriptionTruncated: boolean }} flags
+ * @returns {string}
+ */
+function addNotices(feedback, { instructionInAnswer, descriptionTruncated }) {
+  const notices = [];
+
+  if (instructionInAnswer) {
+    notices.push(INSTRUCTION_NOTICE);
+  }
+
+  if (descriptionTruncated) {
+    notices.push(TRUNCATION_NOTICE);
+  }
+
+  return [...notices, feedback].join(' ');
+}
 
 /**
  * 검증된 요청과 Jira 이슈로 Groq 평가를 실행하고 최종 결과를 돌려줍니다.
@@ -91,10 +121,11 @@ export async function evaluateAnswer({
       // 총점과 등급은 LLM이 아니라 앱이 계산합니다 (api-contract.md 5절).
       const total = computeTotal(evaluation.scores);
 
-      // 평가 지시 문장이 있었으면 정해진 안내 문장을 feedback 앞에 붙입니다.
-      const feedback = evaluation.instructionInAnswer
-        ? `${INSTRUCTION_NOTICE} ${evaluation.feedback}`
-        : evaluation.feedback;
+      // 평가 지시 문장이 있었거나 설명이 잘렸으면 정해진 안내 문장을 feedback 앞에 붙입니다.
+      const feedback = addNotices(evaluation.feedback, {
+        instructionInAnswer: evaluation.instructionInAnswer,
+        descriptionTruncated: isDescriptionTruncated(issue.description)
+      });
 
       // instructionInAnswer는 응답에 넣지 않습니다. 계약서 5절 형식만 돌려줍니다.
       return {

@@ -97,7 +97,7 @@ export function validateEvaluationRequest(payload) {
 
   if (answer.length > MAX_ANSWER_LENGTH) {
     throw invalidInput(
-      `답변은 ${MAX_ANSWER_LENGTH}자 이하로 입력해 주세요.`,
+      `Please keep your answer within ${MAX_ANSWER_LENGTH} characters.`,
       'answer is too long'
     );
   }
@@ -164,12 +164,12 @@ export function normalizeIssueContext(issue) {
 }
 
 /**
- * 문장이 주로 한국어로 쓰였는지 확인합니다.
+ * 문장이 주로 영어로 쓰였는지 확인합니다.
  *
- * 사용자 화면과 Jira 댓글은 한국어이므로, 모델이 영어로 쓴 피드백은 형식 오류로 보고 재시도합니다.
- * 기술 용어(JWT, API, Redis 등)는 영어로 섞여도 되도록, 한글 음절 수가 영문 글자 수의 1/3 이상이면 통과시킵니다.
- * - "서버에서 JWT 토큰을 검증합니다." → 한글 11, 영문 3 → 통과
- * - "Answer aligns with the Jira requirement for 권한 검증." → 한글 4, 영문 약 35 → 실패
+ * 사용자 화면과 Jira 댓글은 영어이므로(main 923fb58 영어화), 모델이 한국어로 쓴 피드백은 형식 오류로 보고 재시도합니다.
+ * Jira 이슈의 한국어 용어를 인용해도 되도록, 영문 글자 수가 한글 음절 수의 3배보다 많으면 통과시킵니다.
+ * - "Validate the 권한 검증 requirement on the server." → 영문 33, 한글 4 → 통과
+ * - "서버에서 JWT 토큰을 검증합니다." → 영문 3, 한글 12 → 실패
  *
  * @param {string} text
  * @returns {boolean}
@@ -250,7 +250,7 @@ export function parseEvaluationOutput(content) {
     throw invalidOutput('improvement is empty');
   }
 
-  // 화면과 Jira 댓글에 그대로 나가는 문장이므로 한국어여야 합니다. 영어면 재시도 대상이 됩니다.
+  // 화면과 Jira 댓글에 그대로 나가는 문장이므로 영어여야 합니다. 한국어면 재시도 대상이 됩니다.
   if (!isMostlyEnglish(feedback)) {
     throw invalidOutput('feedback is not written in English');
   }
